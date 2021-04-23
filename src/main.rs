@@ -1,3 +1,11 @@
+extern crate clap;
+
+mod cli;
+mod data;
+
 fn main() {
-    println!("Hello, world!");
+    match cli::cli() {
+      Err(err) => println!("{}", err),
+      Ok(_) => return,
+    };
 }
