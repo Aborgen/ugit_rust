@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate sha2;
 
 mod cli;
 mod data;
