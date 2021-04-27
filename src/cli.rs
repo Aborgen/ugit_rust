@@ -30,8 +30,12 @@ pub fn cli() -> std::io::Result<()> {
 }
 
 fn init() -> std::io::Result<()> {
-  println!("Creating new ugit repository...");
-  data::init()
+  let result = data::init();
+  if let Ok(_) = result {
+    println!("Creating new ugit repository...");
+  }
+
+  result
 }
 
 fn hash_object(filename: &str) -> std::io::Result<()> {
