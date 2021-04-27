@@ -8,3 +8,6 @@ description = "A clone of git written in Rust, based on the architecture of http
 [dependencies]
 clap = "~2.33"
 sha2 = "0.9.3"
+
+[dev-dependencies]
+serial_test = "0.5.1"
