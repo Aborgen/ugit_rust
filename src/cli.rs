@@ -1,5 +1,8 @@
+use std::path::Path;
+
 use clap::{App, Arg, SubCommand};
 
+use crate::base;
 use crate::data;
 use data::ObjectType;
 
@@ -22,6 +25,8 @@ pub fn cli() -> std::io::Result<()> {
         .help("The resulting hash of a file that has previously been hashed by the hash-object command")
         .required(true)
         .index(1)))
+    .subcommand(SubCommand::with_name("write-tree")
+      .about("Stores current working directory to the object database"))
     .get_matches();
 
   if let Some(_) = matches.subcommand_matches("init") {
@@ -29,13 +34,16 @@ pub fn cli() -> std::io::Result<()> {
   }
   else if let Some(matches) = matches.subcommand_matches("hash-object") {
     // Can simply unwrap, as FILE arg's presence is handled by clap
-    let file = matches.value_of("FILE").unwrap();
-    hash_object(file)?;
+    let file = Path::new(matches.value_of("FILE").unwrap());
+    hash_object(&file)?;
   }
   else if let Some(matches) = matches.subcommand_matches("cat-file") {
     // Can simply unwrap, as OID arg's presence is handled by clap
     let oid = matches.value_of("OID").unwrap();
     cat_file(oid)?;
+  }
+  else if let Some(_) = matches.subcommand_matches("write-tree") {
+    write_tree()?;
   }
 
   Ok(())
@@ -50,7 +58,7 @@ fn init() -> std::io::Result<()> {
   result
 }
 
-fn hash_object(filename: &str) -> std::io::Result<()> {
+fn hash_object(filename: &Path) -> std::io::Result<()> {
   let hash = data::hash_object(filename, ObjectType::Blob)?;
   println!("{:x}", hash);
   Ok(())
@@ -60,4 +68,8 @@ fn cat_file(oid: &str) -> std::io::Result<()> {
   let contents = data::get_object(oid, ObjectType::Blob)?;
   println!("{}", contents);
   Ok(())
+}
+
+fn write_tree() -> std::io::Result<()> {
+  base::write_tree()
 }

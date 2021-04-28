@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Read};
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
@@ -15,7 +15,7 @@ pub enum ObjectType {
 
 pub fn init() -> std::io::Result<()> {
   let objects_dir = format!("{}/{}", ROOT, OBJECTS);
-  if Path::new(&objects_dir).exists() {
+  if Path::new(ROOT).exists() {
     return Err(Error::new(ErrorKind::AlreadyExists, "A ugit repository already exists"));
   }
 
@@ -23,13 +23,19 @@ pub fn init() -> std::io::Result<()> {
   return Ok(())
 }
 
-pub fn hash_object(filename: &str, object_type: ObjectType) -> std::io::Result<GenericArray<u8, U32>> {
-  let mut hasher = Sha256::new();
-  let contents = fs::read_to_string(filename)?;
-  let contents = match object_type {
-    ObjectType::Blob => format!("blob\0{}", contents),
+pub fn hash_object(filename: &Path, object_type: ObjectType) -> std::io::Result<GenericArray<u8, U32>> {
+  if !Path::new(ROOT).exists() {
+    return Err(Error::new(ErrorKind::NotFound, "A ugit repository does not exist in this directory"));
+  }
+
+  let mut contents = match object_type {
+    ObjectType::Blob => String::from("blob\0").into_bytes(),
   };
 
+  let mut f = fs::File::open(filename)?;
+  f.read_to_end(&mut contents)?;
+
+  let mut hasher = Sha256::new();
   hasher.update(&contents);
   let object = hasher.finalize().into();
   let file = format!("{}/{}/{:x}", ROOT, OBJECTS, object);
@@ -38,6 +44,10 @@ pub fn hash_object(filename: &str, object_type: ObjectType) -> std::io::Result<G
 }
 
 pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<String> {
+  if !Path::new(ROOT).exists() {
+    return Err(Error::new(ErrorKind::NotFound, "A ugit repository does not exist in this directory"));
+  }
+
   let s = format!("{}/{}/{}", ROOT, OBJECTS, oid);
   let path = Path::new(&s);
   if !path.exists() {
@@ -76,7 +86,7 @@ mod tests {
   #[test]
   #[serial]
   fn hash_object_subcommand_creates_copy_of_file_named_as_hash_of_same_file() {
-    let test_file = "test.txt";
+    let test_file = Path::new("test.txt");
     let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
     let test_text_as_hash = "bac94dbaf28c6916ef33cad50e4e1e88c3834f51dc7a5d40702a5cfdf324ab72";
     let s = format!("{}/{}/{}", ROOT, OBJECTS, test_text_as_hash);
@@ -86,7 +96,7 @@ mod tests {
     init().unwrap();
     fs::write(test_file, test_text).unwrap();
 
-    hash_object(test_file, ObjectType::Blob).unwrap();
+    hash_object(&test_file, ObjectType::Blob).unwrap();
     assert!(path_with_hash.is_file());
     let contents = fs::read_to_string(path_with_hash).unwrap();
     assert_eq!(contents, format!("blob\0{}", test_text));
@@ -98,14 +108,14 @@ mod tests {
   #[test]
   #[serial]
   fn get_object_subcommand_returns_contents_of_file_with_specified_oid_hash() {
-    let test_file = "test.txt";
+    let test_file = Path::new("test.txt");
     let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
     let test_text_as_hash = "bac94dbaf28c6916ef33cad50e4e1e88c3834f51dc7a5d40702a5cfdf324ab72";
 
     let _ = fs::remove_dir_all(ROOT);
     init().unwrap();
     fs::write(test_file, test_text).unwrap();
-    hash_object(test_file, ObjectType::Blob).unwrap();
+    hash_object(&test_file, ObjectType::Blob).unwrap();
 
     let contents = get_object(test_text_as_hash, ObjectType::Blob).unwrap();
     assert_eq!(&contents, test_text);
