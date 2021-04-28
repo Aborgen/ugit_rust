@@ -1,6 +1,7 @@
 use clap::{App, Arg, SubCommand};
 
 use crate::data;
+use data::ObjectType;
 
 pub fn cli() -> std::io::Result<()> {
   let matches = App::new(env!("CARGO_PKG_NAME"))
@@ -50,13 +51,13 @@ fn init() -> std::io::Result<()> {
 }
 
 fn hash_object(filename: &str) -> std::io::Result<()> {
-  let hash = data::hash_object(filename)?;
+  let hash = data::hash_object(filename, ObjectType::Blob)?;
   println!("{:x}", hash);
   Ok(())
 }
 
 fn cat_file(oid: &str) -> std::io::Result<()> {
-  let contents = data::get_object(oid)?;
+  let contents = data::get_object(oid, ObjectType::Blob)?;
   println!("{}", contents);
   Ok(())
 }
