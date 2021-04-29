@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{Error, ErrorKind, Read};
+use std::io::{Error, ErrorKind};
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
@@ -8,9 +8,10 @@ use sha2::digest::generic_array::{GenericArray, typenum::U32};
 const ROOT: &str = ".ugit";
 const OBJECTS: &str = "objects";
 
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq, Hash, Copy, Clone)]
 pub enum ObjectType {
   Blob,
+  Tree,
 }
 
 pub fn init() -> std::io::Result<()> {
@@ -23,17 +24,18 @@ pub fn init() -> std::io::Result<()> {
   return Ok(())
 }
 
-pub fn hash_object(filename: &Path, object_type: ObjectType) -> std::io::Result<GenericArray<u8, U32>> {
+pub fn hash_object(file_contents: &[u8], object_type: ObjectType) -> std::io::Result<GenericArray<u8, U32>> {
   if !Path::new(ROOT).exists() {
     return Err(Error::new(ErrorKind::NotFound, "A ugit repository does not exist in this directory"));
   }
 
+  // ugit objects are their object type, followed by a null byte, and then the file contents
   let mut contents = match object_type {
     ObjectType::Blob => String::from("blob\0").into_bytes(),
+    ObjectType::Tree => String::from("tree\0").into_bytes(),
   };
 
-  let mut f = fs::File::open(filename)?;
-  f.read_to_end(&mut contents)?;
+  contents.extend(file_contents);
 
   let mut hasher = Sha256::new();
   hasher.update(&contents);
@@ -61,6 +63,9 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
 
   if expected_type == ObjectType::Blob && content_parts[0] != "blob" {
     return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a blob, but was stored as a {}", content_parts[0])));
+  }
+  else if expected_type == ObjectType::Tree && content_parts[0] != "tree" {
+    return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a tree, but was stored as a {}", content_parts[0])));
   }
 
   Ok(String::from(content_parts[1]))

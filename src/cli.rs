@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 
 use clap::{App, Arg, SubCommand};
@@ -59,17 +60,20 @@ fn init() -> std::io::Result<()> {
 }
 
 fn hash_object(filename: &Path) -> std::io::Result<()> {
-  let hash = data::hash_object(filename, ObjectType::Blob)?;
+  let contents = fs::read(filename)?;
+  let hash = data::hash_object(&contents, ObjectType::Blob)?;
   println!("{:x}", hash);
   Ok(())
 }
 
 fn cat_file(oid: &str) -> std::io::Result<()> {
   let contents = data::get_object(oid, ObjectType::Blob)?;
-  println!("{}", contents);
+  print!("{}", contents);
   Ok(())
 }
 
 fn write_tree() -> std::io::Result<()> {
-  base::write_tree()
+  let hash = base::write_tree()?;
+  println!("{:x}", hash);
+  Ok(())
 }
