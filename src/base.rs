@@ -2,24 +2,35 @@ use std::collections::HashMap;
 use std::env;
 use std::io::{Error, ErrorKind};
 use std::fs;
-use std::path::Path;
-
-use sha2::digest::generic_array::{GenericArray, typenum::U32};
+use std::path::{Path, PathBuf};
 
 use crate::data;
 use data::ObjectType;
 
-pub fn write_tree() -> std::io::Result<GenericArray<u8, U32>> {
+pub fn write_tree() -> std::io::Result<String> {
   let path = env::current_dir()?;
   write_tree_recursive(&path)
 }
 
-fn write_tree_recursive(path: &Path) -> std::io::Result<GenericArray<u8, U32>> {
+pub fn read_tree(root_oid: &str) -> std::io::Result<()> {
+  let dir = env::current_dir().unwrap();
+  let tree = get_tree(root_oid, dir)?;
+  for tuple in tree {
+    let (path, oid) = tuple;
+    fs::create_dir_all(&path.parent().unwrap())?;
+    let contents = data::get_object(&oid, ObjectType::Blob)?;
+    fs::write(&path, contents)?;
+  }
+
+  Ok(())
+}
+
+fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
   if !path.is_dir() {
     return Err(Error::new(ErrorKind::InvalidInput, format!("Given path [{}] does not point to a directory", path.display())));
   }
 
-  let mut entries: HashMap<ObjectType, Vec<(GenericArray<u8, U32>, String)>> = HashMap::new();
+  let mut entries: HashMap<ObjectType, Vec<(String, String)>> = HashMap::new();
   entries.insert(ObjectType::Blob, Vec::new());
   entries.insert(ObjectType::Tree, Vec::new());
 
@@ -27,7 +38,7 @@ fn write_tree_recursive(path: &Path) -> std::io::Result<GenericArray<u8, U32>> {
     let entry = entry?;
     let path = entry.path();
     let object_type: ObjectType;
-    let oid: GenericArray<u8, U32>;
+    let oid;
     if is_ignored(&path) {
       continue;
     }
@@ -52,19 +63,43 @@ fn write_tree_recursive(path: &Path) -> std::io::Result<GenericArray<u8, U32>> {
     entries.get(&ObjectType::Blob)
       .unwrap()
       .iter()
-      .map(|entry| format!("blob {:x} {}", entry.0, entry.1))
+      .map(|entry| format!("blob {} {}", entry.0, entry.1))
       .collect::<Vec<_>>()
       .join("\n"),
     entries.get(&ObjectType::Tree)
       .unwrap()
       .iter()
-      .map(|entry| format!("tree {:x} {}", entry.0, entry.1))
+      .map(|entry| format!("tree {} {}", entry.0, entry.1))
       .collect::<Vec<_>>()
       .join("\n"),
   );
 
   let oid = data::hash_object(contents.as_bytes(), ObjectType::Tree)?;
   Ok(oid)
+}
+
+fn get_tree(oid: &str, base_path: PathBuf) -> std::io::Result<Vec<(PathBuf, String)>> {
+  let mut result = Vec::new();
+  let object = data::get_object(oid, ObjectType::Tree)?;
+  for line in object.lines() {
+    let object_parts: Vec<String> = line.splitn(3, " ").map(|obj| String::from(obj)).collect();
+    let object_type = object_parts[0].clone();
+    let oid = object_parts[1].clone();
+
+    let mut path = base_path.clone();
+    path.push(&object_parts[2]);
+    if object_type == "blob" {
+      result.push((path.clone(), oid));
+    }
+    else if object_type == "tree" {
+      get_tree(&oid, path)?;
+    }
+    else {
+      return Err(Error::new(ErrorKind::InvalidInput, format!("Unimplemented object type [{}]", object_type)));
+    }
+  }
+
+  Ok(result)
 }
 
 fn is_ignored(path: &Path) -> bool {

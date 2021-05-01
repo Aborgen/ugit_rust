@@ -28,6 +28,12 @@ pub fn cli() -> std::io::Result<()> {
         .index(1)))
     .subcommand(SubCommand::with_name("write-tree")
       .about("Stores current working directory to the object database"))
+    .subcommand(SubCommand::with_name("read-tree")
+      .about("Replaces current working directory with the one stored under provided OID")
+      .arg(Arg::with_name("OID")
+        .help("The resulting hash of the current working directory that has previously been hashed by the write-tree command")
+        .required(true)
+        .index(1)))
     .get_matches();
 
   if let Some(_) = matches.subcommand_matches("init") {
@@ -46,6 +52,11 @@ pub fn cli() -> std::io::Result<()> {
   else if let Some(_) = matches.subcommand_matches("write-tree") {
     write_tree()?;
   }
+  else if let Some(matches) = matches.subcommand_matches("read-tree") {
+    // Can simply unwrap, as OID arg's presence is handled by clap
+    let oid = matches.value_of("OID").unwrap();
+    read_tree(oid)?;
+  }
 
   Ok(())
 }
@@ -56,13 +67,13 @@ fn init() -> std::io::Result<()> {
     println!("Creating new ugit repository...");
   }
 
-  result
+  Ok(())
 }
 
 fn hash_object(filename: &Path) -> std::io::Result<()> {
   let contents = fs::read(filename)?;
   let hash = data::hash_object(&contents, ObjectType::Blob)?;
-  println!("{:x}", hash);
+  println!("{}", hash);
   Ok(())
 }
 
@@ -74,6 +85,12 @@ fn cat_file(oid: &str) -> std::io::Result<()> {
 
 fn write_tree() -> std::io::Result<()> {
   let hash = base::write_tree()?;
-  println!("{:x}", hash);
+  println!("{}", hash);
+  Ok(())
+}
+
+fn read_tree(oid: &str) -> std::io::Result<()> {
+  base::read_tree(oid)?;
+  println!("Restored current working directory [{}]", oid);
   Ok(())
 }

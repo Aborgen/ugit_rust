@@ -3,7 +3,6 @@ use std::io::{Error, ErrorKind};
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
-use sha2::digest::generic_array::{GenericArray, typenum::U32};
 
 const ROOT: &str = ".ugit";
 const OBJECTS: &str = "objects";
@@ -24,7 +23,7 @@ pub fn init() -> std::io::Result<()> {
   return Ok(())
 }
 
-pub fn hash_object(file_contents: &[u8], object_type: ObjectType) -> std::io::Result<GenericArray<u8, U32>> {
+pub fn hash_object(file_contents: &[u8], object_type: ObjectType) -> std::io::Result<String> {
   if !Path::new(ROOT).exists() {
     return Err(Error::new(ErrorKind::NotFound, "A ugit repository does not exist in this directory"));
   }
@@ -39,10 +38,15 @@ pub fn hash_object(file_contents: &[u8], object_type: ObjectType) -> std::io::Re
 
   let mut hasher = Sha256::new();
   hasher.update(&contents);
-  let object = hasher.finalize().into();
-  let file = format!("{}/{}/{:x}", ROOT, OBJECTS, object);
+  let object: [u8; 32] = hasher.finalize().into();
+  let mut s = String::new();
+  for byte in object.iter() {
+    s = format!("{}{:x}", s, byte);
+  }
+
+  let file = format!("{}/{}/{}", ROOT, OBJECTS, s);
   fs::write(file, &contents)?;
-  Ok(object)
+  Ok(s)
 }
 
 pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<String> {
@@ -62,10 +66,10 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
     .collect();
 
   if expected_type == ObjectType::Blob && content_parts[0] != "blob" {
-    return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a blob, but was stored as a {}", content_parts[0])));
+    return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a blob, but wasn't")));
   }
   else if expected_type == ObjectType::Tree && content_parts[0] != "tree" {
-    return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a tree, but was stored as a {}", content_parts[0])));
+    return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a tree, but wasn't")));
   }
 
   Ok(String::from(content_parts[1]))
