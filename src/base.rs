@@ -13,7 +13,8 @@ pub fn write_tree() -> std::io::Result<String> {
 
 pub fn read_tree(root_oid: &str) -> std::io::Result<()> {
   let dir = env::current_dir().unwrap();
-  let tree = get_tree(root_oid, dir)?;
+  empty_current_directory(&dir)?;
+  let tree = get_tree(root_oid, &dir)?;
   for tuple in tree {
     let (path, oid) = tuple;
     fs::create_dir_all(&path.parent().unwrap())?;
@@ -65,7 +66,7 @@ fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
   Ok(oid)
 }
 
-fn get_tree(oid: &str, base_path: PathBuf) -> std::io::Result<Vec<(PathBuf, String)>> {
+fn get_tree(oid: &str, base_path: &PathBuf) -> std::io::Result<Vec<(PathBuf, String)>> {
   let mut result = Vec::new();
   let object = data::get_object(oid, ObjectType::Tree)?;
   for line in object.lines() {
@@ -79,7 +80,7 @@ fn get_tree(oid: &str, base_path: PathBuf) -> std::io::Result<Vec<(PathBuf, Stri
       result.push((path.clone(), oid));
     }
     else if object_type == "tree" {
-      let mut recur_results = get_tree(&oid, path)?;
+      let mut recur_results = get_tree(&oid, &path)?;
       result.append(&mut recur_results);
     }
     else {
@@ -90,7 +91,23 @@ fn get_tree(oid: &str, base_path: PathBuf) -> std::io::Result<Vec<(PathBuf, Stri
   Ok(result)
 }
 
+fn empty_current_directory(root: &Path) -> std::io::Result<()> {
+  for entry in fs::read_dir(root)? {
+    let entry = entry?.path();
+    if is_ignored(&entry) {
+      continue;
+    }
+    else if entry.is_file() {
+      fs::remove_file(entry)?;
+    }
+    else if entry.is_dir() {
+      fs::remove_dir_all(entry)?;
+    }
+  }
+
+  Ok(())
+}
+
 fn is_ignored(path: &Path) -> bool {
   path.ends_with(".ugit") || path.ends_with("target")
-
 }
