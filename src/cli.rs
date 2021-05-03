@@ -34,6 +34,15 @@ pub fn cli() -> std::io::Result<()> {
         .help("The resulting hash of the current working directory that has previously been hashed by the write-tree command")
         .required(true)
         .index(1)))
+    .subcommand(SubCommand::with_name("commit")
+      .about("Creates a new snapshot of the current working directory with a description")
+      .arg(Arg::with_name("message")
+        .long("message")
+        .short("m")
+        .takes_value(true)
+        .value_name("TEXT")
+        .required(true)
+        .help("Description of the new commit")))
     .get_matches();
 
   if let Some(_) = matches.subcommand_matches("init") {
@@ -57,16 +66,18 @@ pub fn cli() -> std::io::Result<()> {
     let oid = matches.value_of("OID").unwrap();
     read_tree(oid)?;
   }
+  else if let Some(matches) = matches.subcommand_matches("commit") {
+    // Can simply unwrap, as TEXT arg's presence is handled by clap
+    let message = matches.value_of("message").unwrap();
+    commit(&message)?;
+  }
 
   Ok(())
 }
 
 fn init() -> std::io::Result<()> {
-  let result = data::init();
-  if let Ok(_) = result {
-    println!("Creating new ugit repository...");
-  }
-
+  data::init()?;
+  println!("Creating new ugit repository...");
   Ok(())
 }
 
@@ -92,5 +103,11 @@ fn write_tree() -> std::io::Result<()> {
 fn read_tree(oid: &str) -> std::io::Result<()> {
   base::read_tree(oid)?;
   println!("Restored current working directory [{}]", oid);
+  Ok(())
+}
+
+fn commit(message: &str) -> std::io::Result<()> {
+  let hash = base::commit(message)?;
+  println!("Successfully created commit: [{}]", hash);
   Ok(())
 }

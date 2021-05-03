@@ -25,6 +25,12 @@ pub fn read_tree(root_oid: &str) -> std::io::Result<()> {
   Ok(())
 }
 
+pub fn commit(message: &str) -> std::io::Result<String> {
+  let commit = format!("tree {}\n\n{}", write_tree()?, message);
+  let oid = data::hash_object(commit.as_bytes(), ObjectType::Commit)?;
+  Ok(oid)
+}
+
 fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
   if !path.is_dir() {
     return Err(Error::new(ErrorKind::InvalidInput, format!("Given path [{}] does not point to a directory", path.display())));

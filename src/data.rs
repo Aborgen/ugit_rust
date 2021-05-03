@@ -10,6 +10,7 @@ const OBJECTS: &str = "objects";
 #[derive(Eq, PartialEq, Hash, Copy, Clone)]
 pub enum ObjectType {
   Blob,
+  Commit,
   Tree,
 }
 
@@ -31,6 +32,7 @@ pub fn hash_object(file_contents: &[u8], object_type: ObjectType) -> std::io::Re
   // ugit objects are their object type, followed by a null byte, and then the file contents
   let mut contents = match object_type {
     ObjectType::Blob => String::from("blob\0").into_bytes(),
+    ObjectType::Commit => String::from("commit\0").into_bytes(),
     ObjectType::Tree => String::from("tree\0").into_bytes(),
   };
 
@@ -67,6 +69,9 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
 
   if expected_type == ObjectType::Blob && content_parts[0] != "blob" {
     return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a blob, but wasn't")));
+  }
+  else if expected_type == ObjectType::Commit && content_parts[0] != "commit" {
+    return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a commit, but wasn't")));
   }
   else if expected_type == ObjectType::Tree && content_parts[0] != "tree" {
     return Err(Error::new(ErrorKind::InvalidData, format!("Object was expected to be a tree, but wasn't")));
