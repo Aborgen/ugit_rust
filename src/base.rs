@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env;
 use std::io::{Error, ErrorKind};
 use std::fs;
@@ -30,25 +29,22 @@ fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
     return Err(Error::new(ErrorKind::InvalidInput, format!("Given path [{}] does not point to a directory", path.display())));
   }
 
-  let mut entries: HashMap<ObjectType, Vec<(String, String)>> = HashMap::new();
-  entries.insert(ObjectType::Blob, Vec::new());
-  entries.insert(ObjectType::Tree, Vec::new());
-
+  let mut entries: Vec<(&str, String, String)> = Vec::new();
   for entry in fs::read_dir(path)? {
     let entry = entry?;
     let path = entry.path();
-    let object_type: ObjectType;
+    let object_type;
     let oid;
     if is_ignored(&path) {
       continue;
     }
     else if path.is_file() {
       let contents = fs::read(&path)?;
-      object_type = ObjectType::Blob;
-      oid = data::hash_object(&contents, object_type)?;
+      object_type = "blob";
+      oid = data::hash_object(&contents, ObjectType::Blob)?;
     }
     else if path.is_dir() {
-      object_type = ObjectType::Tree;
+      object_type = "tree";
       oid = write_tree_recursive(&path)?;
     }
     else {
@@ -56,23 +52,14 @@ fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
     }
 
     let filename = String::from(path.file_name().unwrap().to_str().unwrap());
-    entries.entry(object_type).and_modify(|entry| entry.push((oid, filename)));
+    entries.push((object_type, oid, filename));
   }
 
-  let contents = format!("{}\n{}",
-    entries.get(&ObjectType::Blob)
-      .unwrap()
+  let contents = entries
       .iter()
-      .map(|entry| format!("blob {} {}", entry.0, entry.1))
+      .map(|entry| format!("{} {} {}", entry.0, entry.1, entry.2))
       .collect::<Vec<_>>()
-      .join("\n"),
-    entries.get(&ObjectType::Tree)
-      .unwrap()
-      .iter()
-      .map(|entry| format!("tree {} {}", entry.0, entry.1))
-      .collect::<Vec<_>>()
-      .join("\n"),
-  );
+      .join("\n");
 
   let oid = data::hash_object(contents.as_bytes(), ObjectType::Tree)?;
   Ok(oid)
@@ -92,7 +79,8 @@ fn get_tree(oid: &str, base_path: PathBuf) -> std::io::Result<Vec<(PathBuf, Stri
       result.push((path.clone(), oid));
     }
     else if object_type == "tree" {
-      get_tree(&oid, path)?;
+      let mut recur_results = get_tree(&oid, path)?;
+      result.append(&mut recur_results);
     }
     else {
       return Err(Error::new(ErrorKind::InvalidInput, format!("Unimplemented object type [{}]", object_type)));
