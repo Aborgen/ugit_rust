@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::data;
-use data::ObjectType;
+use data::{Commit, ObjectType};
 
 pub fn write_tree() -> std::io::Result<String> {
   let path = env::current_dir()?;
@@ -38,6 +38,47 @@ pub fn commit(message: &str) -> std::io::Result<String> {
   let oid = data::hash_object(commit.as_bytes(), ObjectType::Commit)?;
   data::set_head(&oid)?;
   Ok(oid)
+}
+
+pub fn get_commit(oid: &str) -> std::io::Result<Commit> {
+  let mut tree = "";
+  let mut parent = None;
+  let commit = data::get_object(oid, ObjectType::Commit)?;
+
+  let mut lines = commit.lines();
+  for line in lines.by_ref() {
+    if line == "" {
+      break;
+    }
+
+    let object_parts: Vec<_> = line.splitn(2, " ").collect();
+    if object_parts[0] == "tree" {
+      tree = object_parts[1];
+    }
+    else if object_parts[0] == "parent" {
+      parent = Some(String::from(object_parts[1]));
+    }
+    else {
+      panic!("Unimplemented branch of get_commit: {}", object_parts[0]);
+    }
+  }
+
+  let mut message = String::from(lines.by_ref().next().unwrap());
+  for line in lines {
+    message = format!("{}\n{}", message, line);
+  }
+
+  if tree == "" {
+    return Err(Error::new(ErrorKind::InvalidData, format!("Missing tree row of commit")));
+  }
+
+  Ok(
+    Commit {
+      tree: String::from(tree),
+      parent,
+      message,
+    }
+  )
 }
 
 fn write_tree_recursive(path: &Path) -> std::io::Result<String> {

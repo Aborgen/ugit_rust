@@ -43,6 +43,11 @@ pub fn cli() -> std::io::Result<()> {
         .value_name("TEXT")
         .required(true)
         .help("Description of the new commit")))
+    .subcommand(SubCommand::with_name("log")
+      .about("Prints descending list of commits")
+      .arg(Arg::with_name("OID")
+        .help("An optional starting point. By default, it will start from HEAD")
+        .index(1)))
     .get_matches();
 
   if let Some(_) = matches.subcommand_matches("init") {
@@ -70,6 +75,10 @@ pub fn cli() -> std::io::Result<()> {
     // Can simply unwrap, as TEXT arg's presence is handled by clap
     let message = matches.value_of("message").unwrap();
     commit(&message)?;
+  }
+  else if let Some(matches) = matches.subcommand_matches("log") {
+    let oid = matches.value_of("OID");
+    log(oid)?;
   }
 
   Ok(())
@@ -109,5 +118,33 @@ fn read_tree(oid: &str) -> std::io::Result<()> {
 fn commit(message: &str) -> std::io::Result<()> {
   let hash = base::commit(message)?;
   println!("Successfully created commit: [{}]", hash);
+  Ok(())
+}
+
+fn log(oid: Option<&str>) -> std::io::Result<()> {
+  let oid = match oid {
+    Some(oid) => String::from(oid),
+    None => match data::get_head() {
+      Some(oid) => oid?,
+      None => return Ok(())
+    }
+  };
+
+  let mut oid = Some(oid);
+  while let Some(s) = oid {
+    let commit = base::get_commit(&s)?;
+    println!("commit {}", s);
+    
+    for line in commit.message.lines() {
+      print!("\n{fill}{}", line, fill=" ".repeat(10));
+    }
+
+    oid = commit.parent;
+    if oid.is_some() {
+      println!("\n");
+    }
+  }
+
+  println!("");
   Ok(())
 }

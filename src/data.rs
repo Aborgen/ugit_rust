@@ -14,6 +14,12 @@ pub enum ObjectType {
   Tree,
 }
 
+pub struct Commit {
+  pub message: String,
+  pub parent: Option<String>,
+  pub tree: String,
+}
+
 pub fn init() -> std::io::Result<()> {
   let objects_dir = format!("{}/{}", ROOT, OBJECTS);
   if Path::new(ROOT).exists() {
