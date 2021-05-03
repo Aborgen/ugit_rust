@@ -80,6 +80,23 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
   Ok(String::from(content_parts[1]))
 }
 
+pub fn set_head(oid: &str) -> std::io::Result<()> {
+  let s = format!("{}/HEAD", ROOT);
+  let path = Path::new(&s);
+  fs::write(path, oid)
+}
+
+pub fn get_head() -> Option<std::io::Result<String>> {
+  let s = format!("{}/HEAD", ROOT);
+  let path = Path::new(&s);
+  if path.exists() {
+    Some(fs::read_to_string(path))
+  }
+  else {
+    None
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use serial_test::serial;

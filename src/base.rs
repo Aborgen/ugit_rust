@@ -26,8 +26,17 @@ pub fn read_tree(root_oid: &str) -> std::io::Result<()> {
 }
 
 pub fn commit(message: &str) -> std::io::Result<String> {
-  let commit = format!("tree {}\n\n{}", write_tree()?, message);
+  let oid = write_tree()?;
+  let commit = match data::get_head() {
+    Some(head) => {
+      let head = head?;
+      format!("tree {}\nparent {}\n\n{}", oid, head, message)
+    },
+    None => format!("tree {}\n\n{}", oid, message)
+  };
+
   let oid = data::hash_object(commit.as_bytes(), ObjectType::Commit)?;
+  data::set_head(&oid)?;
   Ok(oid)
 }
 
