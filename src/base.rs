@@ -7,13 +7,13 @@ use crate::data;
 use data::{Commit, ObjectType};
 
 pub fn write_tree() -> std::io::Result<String> {
-  let path = env::current_dir()?;
+  let path = data::generate_path(data::PathVariant::Root)?;
   write_tree_recursive(&path)
 }
 
 pub fn read_tree(root_oid: &str) -> std::io::Result<()> {
   let dir = env::current_dir().unwrap();
-  empty_current_directory(&dir)?;
+  empty_current_directory()?;
   let tree = get_tree(root_oid, &dir)?;
   for tuple in tree {
     let (path, oid) = tuple;
@@ -147,7 +147,16 @@ fn get_tree(oid: &str, base_path: &PathBuf) -> std::io::Result<Vec<(PathBuf, Str
   Ok(result)
 }
 
-fn empty_current_directory(root: &Path) -> std::io::Result<()> {
+// Dangerous function.
+fn empty_current_directory() -> std::io::Result<()> {
+  let mut root = env::current_dir().unwrap();
+  root.push(".ugit");
+  if !root.is_dir() {
+    root.pop();
+    panic!("Tried to empty a directory without a ugit repository: {}", root.display());
+  }
+
+  root.pop();
   for entry in fs::read_dir(root)? {
     let entry = entry?.path();
     if is_ignored(&entry) {
@@ -166,4 +175,217 @@ fn empty_current_directory(root: &Path) -> std::io::Result<()> {
 
 fn is_ignored(path: &Path) -> bool {
   path.ends_with(".ugit") || path.ends_with("target")
+}
+
+#[cfg(test)]
+mod tests {
+  use serial_test::serial;
+  use super::*;
+
+  #[derive(Clone, Debug)]
+  struct DirNode {
+    pub name: String,
+    pub children: Option<DirChildren>,
+  }
+
+  #[derive(Clone, Debug)]
+  struct DirChildren(Vec<DirNode>);
+  impl DirChildren {
+    pub fn new(children: &[DirNode]) -> Self {
+      Self { 0: children.to_vec() }
+    }
+  }
+
+  impl IntoIterator for DirChildren {
+    type Item = DirNode;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    fn into_iter(self) -> Self::IntoIter {
+      self.0.into_iter()
+    }
+  }
+
+  impl DirNode {
+    pub fn foreach<F1, F2>(&self, dir_func: F1, else_func: F2)
+    where
+      F1: Fn(&DirNode) -> bool + Copy,
+      F2: Fn(&DirNode) -> bool + Copy,
+    {
+      self.foreach_recursive(&self, dir_func, else_func);
+    }
+
+    fn foreach_recursive<F1, F2>(&self, root: &DirNode, dir_func: F1, else_func: F2) -> bool
+    where
+      F1: Fn(&DirNode) -> bool + Copy,
+      F2: Fn(&DirNode) -> bool + Copy,
+    {
+
+      if !dir_func(&root) {
+        return false;
+      }
+
+      env::set_current_dir(&root.name).expect(format!("Cannot cd to {}", &root.name).as_str());
+      if let Some(children) = root.children.clone() {
+        for child in children.into_iter() {
+          let result = if child.children.is_some() {
+            self.foreach_recursive(&child, dir_func, else_func)
+          }
+          else {
+            else_func(&child)
+          };
+
+          if !result {
+            panic!("Issue within foreach at [{:?}]", child);
+          }
+        }
+      }
+
+      env::set_current_dir("..").expect(format!("Cannot cd to dir above {}", &root.name).as_str());
+      true
+    }
+  }
+
+  impl Default for DirNode {
+    fn default() -> Self {
+      DirNode {
+        name: String::from("TEST"),
+        children: Some(DirChildren::new(&[
+          DirNode {
+            name: String::from("index.html"),
+            children: None,
+          },
+          DirNode {
+            name: String::from("style.css"),
+            children: None,
+          },
+          DirNode {
+            name: String::from("One"),
+            children: Some(DirChildren::new(&[
+              DirNode {
+                name: String::from("Two"),
+                children: Some(DirChildren::new(&[
+                  DirNode {
+                    name: String::from(".SuperSecretFile"),
+                    children: None,
+                  },
+                ])),
+              },
+            ])),
+          },
+        ])),
+      }
+    }
+  }
+
+  #[test]
+  #[serial]
+  fn empty_current_directory_clears_everything_in_current_directory() {
+    let (_root, cleanup) = create_test_directory();
+    let mut i = 0;
+    for _ in fs::read_dir(".") {
+      i = i + 1;
+    }
+
+    assert!(i > 0);
+    empty_current_directory().expect("Some issue having to do with emptying the current directory");
+
+    i = 0;
+    for _ in fs::read_dir(".") {
+      i = i + 1;
+    }
+
+    // The iterator from read_dir will always include at least '.'
+    assert_eq!(i, 1);
+    cleanup();
+  }
+
+  #[test]
+  #[serial]
+  fn write_tree_returns_an_oid_of_the_entire_directory() {
+    let (dir_tree, cleanup) = create_test_directory();
+    let expected = "2104e4d38c58b6477d2f901aa07190d55e63fd1f93cf0f309014e272912040b6";
+    let oid = write_tree().expect("Issue when writing tree");
+    assert_eq!(expected, oid);
+
+    let dir_func = |node: &DirNode| {
+      let path = Path::new(&node.name);
+      let oid = write_tree_recursive(&path).expect("Issue when writing tree recursively");
+      let oid_file = data::generate_path(data::PathVariant::OID(&oid)).expect(format!("Issue when generating a path for OID {}", &oid).as_str());
+      let contents = fs::read_to_string(&oid_file).expect(format!("Issue with reading OID [{}]", oid).as_str());
+      if let Some(children) = node.children.clone() {
+        for child in children.into_iter() {
+          assert!(contents.contains(&child.name));
+        }
+      }
+
+      true
+    };
+
+    let file_func = |node: &DirNode| {
+      let original_contents = fs::read(&node.name)
+        .expect(format!("Issue when reading test file {}", node.name).as_str());
+
+      let oid = data::hash_object(&original_contents, ObjectType::Blob).expect("Issue when hashing object");
+      let oid_file = data::generate_path(data::PathVariant::OID(&oid)).expect(format!("Issue when generating a path for OID {}", &oid).as_str());
+      let contents = fs::read(&oid_file)
+        .expect("Issue when reading from OID");
+
+      let content_parts: Vec<_> = contents.splitn(2, |b| *b == 0).collect();
+      assert_eq!(content_parts[1], original_contents);
+      true
+    };
+
+    let next_tree = DirNode {
+      name: String::from("."),
+      children: dir_tree.children.clone(),
+    };
+
+    next_tree.foreach(dir_func, file_func);
+    env::set_current_dir(&dir_tree.name).expect("Issue when cding to test directory");
+    cleanup();
+  }
+
+  fn create_test_directory() -> (DirNode, impl Fn()) {
+    let dir_tree = DirNode::default();
+    let root = PathBuf::from(&dir_tree.name);
+    if root.exists() {
+      fs::remove_dir_all(&root).expect("Issue when cleaning up possible leftovers");
+    }
+
+    create_test_directory_recur(&dir_tree, PathBuf::new());
+    env::set_current_dir(&root).expect("Issue when cding one up from test directory");
+    data::init().expect("Issue when initing test repository");
+    (
+      dir_tree, move || {
+        env::set_current_dir("..").expect("Issue when cding one up from test directory");
+        if !root.is_dir() {
+          let cwd = env::current_dir().expect("Issue when geting cwd");
+          panic!("Cannot see test directory in cwd: {}", cwd.display());
+        }
+
+        fs::remove_dir_all(&root).expect("Issue when deleting test directory");
+      }
+    )
+  }
+
+  fn create_test_directory_recur(root: &DirNode, dir_name: PathBuf) {
+    let dir_func = |node: &DirNode| -> bool {
+      let mut path = dir_name.clone();
+      path.push(&node.name);
+      match fs::create_dir(&path) {
+        Ok(_) => true,
+        Err(_) => false
+      }
+    };
+
+    let else_func = |node: &DirNode| -> bool {
+      let mut path = dir_name.clone();
+      path.push(&node.name);
+      match fs::write(&path, "") {
+        Ok(_) => true,
+        Err(_) => false
+      }
+    };
+
+    root.foreach(dir_func, else_func);
+  }
 }
