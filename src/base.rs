@@ -87,6 +87,10 @@ pub fn checkout(oid: &str) -> std::io::Result<()> {
   data::set_head(oid)
 }
 
+pub fn create_tag(name: &str, oid: &str) -> std::io::Result<()> {
+  unimplemented!();
+}
+
 fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
   if !path.is_dir() {
     return Err(Error::new(ErrorKind::InvalidInput, format!("Given path [{}] does not point to a directory", path.display())));

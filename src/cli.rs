@@ -54,18 +54,28 @@ pub fn cli() -> std::io::Result<()> {
         .help("The commit identifier to set HEAD to")
         .required(true)
         .index(1)))
+    .subcommand(SubCommand::with_name("tag")
+      .about("Creates an alias NAME for either the given OID or HEAD")
+      .arg(Arg::with_name("NAME")
+        .help("The name of the tag to be created")
+        .required(true)
+        .index(1))
+      .arg(Arg::with_name("OID")
+        .help("The optional commit OID to be aliased")
+        .required(false)
+        .index(2)))
     .get_matches();
 
   if let Some(_) = matches.subcommand_matches("init") {
     init()?;
   }
   else if let Some(matches) = matches.subcommand_matches("hash-object") {
-    // Can simply unwrap, as FILE arg's presence is handled by clap
+    // Can simply unwrap, as FILE arg's presence is required by clap
     let file = Path::new(matches.value_of("FILE").unwrap());
     hash_object(&file)?;
   }
   else if let Some(matches) = matches.subcommand_matches("cat-file") {
-    // Can simply unwrap, as OID arg's presence is handled by clap
+    // Can simply unwrap, as OID arg's presence is required by clap
     let oid = matches.value_of("OID").unwrap();
     cat_file(oid)?;
   }
@@ -73,12 +83,12 @@ pub fn cli() -> std::io::Result<()> {
     write_tree()?;
   }
   else if let Some(matches) = matches.subcommand_matches("read-tree") {
-    // Can simply unwrap, as OID arg's presence is handled by clap
+    // Can simply unwrap, as OID arg's presence is required by clap
     let oid = matches.value_of("OID").unwrap();
     read_tree(oid)?;
   }
   else if let Some(matches) = matches.subcommand_matches("commit") {
-    // Can simply unwrap, as TEXT arg's presence is handled by clap
+    // Can simply unwrap, as TEXT arg's presence is required by clap
     let message = matches.value_of("message").unwrap();
     commit(&message)?;
   }
@@ -87,9 +97,15 @@ pub fn cli() -> std::io::Result<()> {
     log(oid)?;
   }
   else if let Some(matches) = matches.subcommand_matches("checkout") {
-    // Can simply unwrap, as OID arg's presence is handled by clap
+    // Can simply unwrap, as OID arg's presence is required by clap
     let oid = matches.value_of("OID").unwrap();
     checkout(oid)?;
+  }
+  else if let Some(matches) = matches.subcommand_matches("tag") {
+    // Can simply unwrap, as NAME arg's presence is required by clap
+    let name = matches.value_of("NAME").unwrap();
+    let oid = matches.value_of("OID");
+    tag(&name, oid)?;
   }
 
   Ok(())
@@ -162,4 +178,20 @@ fn log(oid: Option<&str>) -> std::io::Result<()> {
 
 fn checkout(oid: &str) -> std::io::Result<()> {
   base::checkout(oid)
+}
+
+fn tag(name: &str, oid: Option<&str>) -> std::io::Result<()> {
+  let oid = match oid {
+    Some(oid) => {
+      String::from(oid)
+    },
+    None => {
+      match data::get_head() {
+        Some(oid) => oid?,
+        None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "A ugit repository does not exist"))
+      }
+    }
+  };
+
+  base::create_tag(name, &oid)
 }
