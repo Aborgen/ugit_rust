@@ -279,22 +279,12 @@ mod tests {
   #[test]
   #[serial]
   fn empty_current_directory_clears_everything_in_current_directory() {
-    let (_root, cleanup) = create_test_directory();
-    let mut i = 0;
-    for _ in fs::read_dir(".") {
-      i = i + 1;
-    }
+    let (_, cleanup) = create_test_directory();
+    assert!(fs::read_dir(".").unwrap().count() > 1);
 
-    assert!(i > 0);
     empty_current_directory().expect("Some issue having to do with emptying the current directory");
-
-    i = 0;
-    for _ in fs::read_dir(".") {
-      i = i + 1;
-    }
-
-    // The iterator from read_dir will always include at least '.'
-    assert_eq!(i, 1);
+    // The iterator from read_dir will always include at least '.ugit'
+    assert_eq!(fs::read_dir(".").unwrap().count(), 1);
     cleanup();
   }
 
@@ -311,6 +301,7 @@ mod tests {
       let oid = write_tree_recursive(&path).expect("Issue when writing tree recursively");
       let oid_file = data::generate_path(data::PathVariant::OID(&oid)).expect(format!("Issue when generating a path for OID {}", &oid).as_str());
       let contents = fs::read_to_string(&oid_file).expect(format!("Issue with reading OID [{}]", oid).as_str());
+      // The file generated from write_tree_recursive represents the directory, and contains the oids, filenames, and directory names within it
       if let Some(children) = node.children.clone() {
         for child in children.into_iter() {
           assert!(contents.contains(&child.name));
@@ -320,6 +311,7 @@ mod tests {
       true
     };
 
+    // Assure that each file in dir_tree has been hashed and copied to the ugit repository correctly
     let file_func = |node: &DirNode| {
       let original_contents = fs::read(&node.name)
         .expect(format!("Issue when reading test file {}", node.name).as_str());
@@ -331,6 +323,38 @@ mod tests {
 
       let content_parts: Vec<_> = contents.splitn(2, |b| *b == 0).collect();
       assert_eq!(content_parts[1], original_contents);
+      true
+    };
+
+    let next_tree = DirNode {
+      name: String::from("."),
+      children: dir_tree.children.clone(),
+    };
+
+    next_tree.foreach(dir_func, file_func);
+    env::set_current_dir(&dir_tree.name).expect("Issue when cding to test directory");
+    cleanup();
+  }
+
+  #[test]
+  #[serial]
+  fn read_tree_replaces_repository_root_with_snapshot_taken_from_write_tree() {
+    let (dir_tree, cleanup) = create_test_directory();
+    let oid = write_tree().expect("Issue when writing tree");
+    empty_current_directory().expect("Issue when emptying root directory");
+    assert_eq!(fs::read_dir(".").unwrap().count(), 1);
+
+    read_tree(&oid).expect("Issue when restoring from write_tree snapshot");
+    let dir_func = |node: &DirNode| {
+      let path = Path::new(&node.name);
+      println!("is {} in {}", path.display(), env::current_dir().unwrap().display());
+      assert!(path.is_dir());
+      true
+    };
+
+    let file_func = |node: &DirNode| {
+      let path = Path::new(&node.name);
+      assert!(path.is_file());
       true
     };
 
