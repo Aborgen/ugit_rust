@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::io::{Error, ErrorKind};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use sha2::{Digest, Sha256};
 
@@ -110,7 +110,7 @@ pub enum PathVariant<'a> {
   Objects,
   OID(&'a str),
   Root,
-  Ugit,
+  _Ugit,
 }
 
 pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
@@ -134,7 +134,7 @@ pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
       path
     },
     PathVariant::Root => path.parent().unwrap().to_path_buf(),
-    PathVariant::Ugit => path,
+    PathVariant::_Ugit => path,
   };
 
   Ok(path)

@@ -81,6 +81,12 @@ pub fn get_commit(oid: &str) -> std::io::Result<Commit> {
   )
 }
 
+pub fn checkout(oid: &str) -> std::io::Result<()> {
+  let commit = get_commit(oid)?;
+  read_tree(&commit.tree)?;
+  data::set_head(oid)
+}
+
 fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
   if !path.is_dir() {
     return Err(Error::new(ErrorKind::InvalidInput, format!("Given path [{}] does not point to a directory", path.display())));

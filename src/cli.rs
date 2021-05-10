@@ -35,7 +35,7 @@ pub fn cli() -> std::io::Result<()> {
         .required(true)
         .index(1)))
     .subcommand(SubCommand::with_name("commit")
-      .about("Creates a new snapshot of the current working directory with a description")
+      .about("Creates a new snapshot of the observed directory with a description")
       .arg(Arg::with_name("message")
         .long("message")
         .short("m")
@@ -47,6 +47,12 @@ pub fn cli() -> std::io::Result<()> {
       .about("Prints descending list of commits")
       .arg(Arg::with_name("OID")
         .help("An optional starting point. By default, it will start from HEAD")
+        .index(1)))
+    .subcommand(SubCommand::with_name("checkout")
+      .about("Sets HEAD to given commit OID, and updates observed directory with the contents of that commit")
+      .arg(Arg::with_name("OID")
+        .help("The commit identifier to set HEAD to")
+        .required(true)
         .index(1)))
     .get_matches();
 
@@ -79,6 +85,11 @@ pub fn cli() -> std::io::Result<()> {
   else if let Some(matches) = matches.subcommand_matches("log") {
     let oid = matches.value_of("OID");
     log(oid)?;
+  }
+  else if let Some(matches) = matches.subcommand_matches("checkout") {
+    // Can simply unwrap, as OID arg's presence is handled by clap
+    let oid = matches.value_of("OID").unwrap();
+    checkout(oid)?;
   }
 
   Ok(())
@@ -147,4 +158,8 @@ fn log(oid: Option<&str>) -> std::io::Result<()> {
 
   println!("");
   Ok(())
+}
+
+fn checkout(oid: &str) -> std::io::Result<()> {
+  base::checkout(oid)
 }
