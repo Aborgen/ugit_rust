@@ -30,6 +30,7 @@ pub fn init() -> std::io::Result<()> {
   fs::create_dir(&root)?;
 
   fs::create_dir(generate_path(PathVariant::Objects)?)?;
+  fs::create_dir(generate_path(PathVariant::Refs)?)?;
   return Ok(())
 }
 
@@ -86,16 +87,16 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
   Ok(String::from(content_parts[1]))
 }
 
-pub fn set_head(oid: &str) -> std::io::Result<()> {
-  let path = generate_path(PathVariant::Head)?;
+pub fn update_ref(name: &str, oid: &str) -> std::io::Result<()> {
+  let path = generate_path(PathVariant::Ref(name))?;
   fs::write(&path, oid)?;
   Ok(())
 }
 
-pub fn get_head() -> Option<std::io::Result<String>> {
-  let path = match generate_path(PathVariant::Head) {
+pub fn get_ref(name: &str) -> Option<std::io::Result<String>> {
+  let path = match generate_path(PathVariant::Ref(name)) {
     Ok(path) => path,
-    Err(err) => return Some(Err(Error::new(ErrorKind::NotFound, format!("Error when getting HEAD -- {}", err).as_str())))
+    Err(err) => return Some(Err(Error::new(ErrorKind::NotFound, format!("Error when getting ref -- {}", err).as_str())))
   };
 
   if !path.is_file() {
@@ -106,11 +107,12 @@ pub fn get_head() -> Option<std::io::Result<String>> {
 }
 
 pub enum PathVariant<'a> {
-  Head,
   Objects,
   OID(&'a str),
+  Ref(&'a str),
+  Refs,
   Root,
-  _Ugit,
+  Ugit,
 }
 
 pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
@@ -120,10 +122,6 @@ pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
   };
 
   let path = match variant {
-    PathVariant::Head => {
-      path.push("HEAD");
-      path
-    },
     PathVariant::Objects => {
       path.push("objects");
       path
@@ -133,8 +131,23 @@ pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
       path.push(oid);
       path
     },
+    PathVariant::Ref(head_or_oid) => {
+      if head_or_oid == "head" {
+        path.push("HEAD");
+      }
+      else {
+        path.push("refs");
+        path.push(head_or_oid);
+      }
+
+      path
+    },
+    PathVariant::Refs => {
+      path.push("refs");
+      path
+    },
     PathVariant::Root => path.parent().unwrap().to_path_buf(),
-    PathVariant::_Ugit => path,
+    PathVariant::Ugit => path,
   };
 
   Ok(path)
@@ -162,6 +175,7 @@ fn get_repository() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+  use std::path::Path;
   use serial_test::serial;
   use super::*;
 
@@ -170,8 +184,9 @@ mod tests {
   fn init_subcommand_creates_expected_directory_tree() {
     create_test_directory();
     {
-      let dir = generate_path(PathVariant::Ugit).unwrap();
-      assert!(dir.exists());
+      assert!(generate_path(PathVariant::Ugit).unwrap().exists());
+      assert!(generate_path(PathVariant::Objects).unwrap().exists());
+      assert!(generate_path(PathVariant::Refs).unwrap().exists());
     }
     delete_test_directory();
   }

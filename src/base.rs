@@ -27,7 +27,7 @@ pub fn read_tree(root_oid: &str) -> std::io::Result<()> {
 
 pub fn commit(message: &str) -> std::io::Result<String> {
   let oid = write_tree()?;
-  let commit = match data::get_head() {
+  let commit = match data::get_ref("head") {
     Some(head) => {
       let head = head?;
       format!("tree {}\nparent {}\n\n{}", oid, head, message)
@@ -36,7 +36,7 @@ pub fn commit(message: &str) -> std::io::Result<String> {
   };
 
   let oid = data::hash_object(commit.as_bytes(), ObjectType::Commit)?;
-  data::set_head(&oid)?;
+  data::update_ref("head", &oid)?;
   Ok(oid)
 }
 
@@ -84,7 +84,7 @@ pub fn get_commit(oid: &str) -> std::io::Result<Commit> {
 pub fn checkout(oid: &str) -> std::io::Result<()> {
   let commit = get_commit(oid)?;
   read_tree(&commit.tree)?;
-  data::set_head(oid)
+  data::update_ref("head", oid)
 }
 
 pub fn create_tag(name: &str, oid: &str) -> std::io::Result<()> {
