@@ -93,8 +93,8 @@ pub fn cli() -> std::io::Result<()> {
     commit(&message)?;
   }
   else if let Some(matches) = matches.subcommand_matches("log") {
-    let oid = matches.value_of("OID");
-    log(oid)?;
+    let oid = base::try_resolve_as_ref(matches.value_of("OID").unwrap_or("@"))?;
+    log(&oid)?;
   }
   else if let Some(matches) = matches.subcommand_matches("checkout") {
     // Can simply unwrap, as OID arg's presence is required by clap
@@ -104,8 +104,8 @@ pub fn cli() -> std::io::Result<()> {
   else if let Some(matches) = matches.subcommand_matches("tag") {
     // Can simply unwrap, as NAME arg's presence is required by clap
     let name = matches.value_of("NAME").unwrap();
-    let oid = matches.value_of("OID");
-    tag(&name, oid)?;
+    let oid = base::try_resolve_as_ref(matches.value_of("OID").unwrap_or("@"))?;
+    tag(&name, &oid)?;
   }
 
   Ok(())
@@ -148,16 +148,8 @@ fn commit(message: &str) -> std::io::Result<()> {
   Ok(())
 }
 
-fn log(oid: Option<&str>) -> std::io::Result<()> {
-  let oid = match oid {
-    Some(oid) => String::from(oid),
-    None => match data::get_head() {
-      Some(oid) => oid?,
-      None => return Ok(())
-    }
-  };
-
-  let mut oid = Some(oid);
+fn log(oid: &str) -> std::io::Result<()> {
+  let mut oid = Some(String::from(oid));
   while let Some(s) = oid {
     let s = base::try_resolve_as_ref(&s)?;
     let commit = base::get_commit(&s)?;
@@ -181,18 +173,6 @@ fn checkout(oid: &str) -> std::io::Result<()> {
   base::checkout(oid)
 }
 
-fn tag(name: &str, oid: Option<&str>) -> std::io::Result<()> {
-  let oid = match oid {
-    Some(oid) => {
-      base::try_resolve_as_ref(oid)?
-    },
-    None => {
-      match data::get_head() {
-        Some(oid) => oid?,
-        None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "A ugit repository does not exist"))
-      }
-    }
-  };
-
+fn tag(name: &str, oid: &str) -> std::io::Result<()> {
   base::create_tag(name, &oid)
 }
