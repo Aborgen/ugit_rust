@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::data;
+use crate::utils;
 use data::{Commit, ObjectType, PathVariant, RefVariant};
 
 pub fn write_tree() -> std::io::Result<String> {
@@ -27,7 +28,7 @@ pub fn read_tree(root_oid: &str) -> std::io::Result<()> {
 
 pub fn commit(message: &str) -> std::io::Result<String> {
   let oid = write_tree()?;
-  let commit = match data::get_ref(RefVariant::Head) {
+  let commit = match data::get_head() {
     Some(head) => {
       let head = head?;
       format!("tree {}\nparent {}\n\n{}", oid, head, message)
@@ -36,7 +37,7 @@ pub fn commit(message: &str) -> std::io::Result<String> {
   };
 
   let oid = data::hash_object(commit.as_bytes(), ObjectType::Commit)?;
-  data::update_ref(RefVariant::Head, &oid)?;
+  data::set_head(&oid)?;
   Ok(oid)
 }
 
@@ -84,11 +85,47 @@ pub fn get_commit(oid: &str) -> std::io::Result<Commit> {
 pub fn checkout(oid: &str) -> std::io::Result<()> {
   let commit = get_commit(oid)?;
   read_tree(&commit.tree)?;
-  data::update_ref(RefVariant::Head, oid)
+  data::set_head(oid)
 }
 
 pub fn create_tag(name: &str, oid: &str) -> std::io::Result<()> {
   data::update_ref(RefVariant::Tag(name), oid)
+}
+
+pub fn try_resolve_as_ref(the_ref: &str) -> std::io::Result<String> {
+  let oid = {
+    if let Some(possible_oid) = data::get_ref(RefVariant::Tag(the_ref)) {
+      match possible_oid {
+        Ok(oid) => oid,
+        Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve tag {}, an error occured: {}", the_ref, err)))
+      }
+    }
+    else if let Some(possible_oid) = data::get_ref(RefVariant::Head(the_ref)) {
+      match possible_oid {
+        Ok(oid) => oid,
+        Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve head {}, an error occured: {}", the_ref, err)))
+      }
+    }
+    else if the_ref == "HEAD" || the_ref == "@" {
+      if let Some(possible_oid) = data::get_head() {
+        match possible_oid {
+          Ok(oid) => oid,
+          Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve {}, an error occured: {}", the_ref, err)))
+        }
+      }
+      else {
+        return Err(Error::new(ErrorKind::NotFound, "While trying to resolve as ref: HEAD does not exist"));
+      }
+    }
+    else if utils::is_hex(the_ref) {
+      String::from(the_ref)
+    }
+    else {
+      return Err(Error::new(ErrorKind::InvalidInput, format!("Unrecognized name {}", the_ref)));
+    }
+  };
+
+  Ok(oid)
 }
 
 fn write_tree_recursive(path: &Path) -> std::io::Result<String> {

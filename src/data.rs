@@ -30,9 +30,11 @@ pub fn init() -> std::io::Result<()> {
   fs::create_dir(&root)?;
   // Create .ugit/objects
   fs::create_dir(generate_path(PathVariant::Objects)?)?;
-  // Create directories within .ugit/refs
+  // Create .ugit/refs
   fs::create_dir(generate_path(PathVariant::Refs)?)?;
-  fs::create_dir(generate_path(PathVariant::Ref(RefVariant::Tags))?)?;
+  // Create directories within .ugit/refs
+  fs::create_dir(generate_path(PathVariant::Heads)?)?;
+  fs::create_dir(generate_path(PathVariant::Tags)?)?;
 
   return Ok(())
 }
@@ -91,15 +93,29 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
 }
 
 pub fn update_ref(ref_variant: RefVariant, oid: &str) -> std::io::Result<()> {
-  let path = generate_path(PathVariant::Ref(ref_variant))?;
-  fs::write(&path, oid)?;
-  Ok(())
+  let maybe_path = generate_path(PathVariant::Ref(ref_variant));
+  update_internal_file(&maybe_path, oid)
 }
 
 pub fn get_ref(ref_variant: RefVariant) -> Option<std::io::Result<String>> {
-  let path = match generate_path(PathVariant::Ref(ref_variant)) {
+  let maybe_path = generate_path(PathVariant::Ref(ref_variant));
+  get_from_internal_file(&maybe_path)
+}
+
+pub fn set_head(oid: &str) -> std::io::Result<()> {
+  let maybe_path = generate_path(PathVariant::Head);
+  update_internal_file(&maybe_path, oid)
+}
+
+pub fn get_head() -> Option<std::io::Result<String>> {
+  let maybe_path = generate_path(PathVariant::Head);
+  get_from_internal_file(&maybe_path)
+}
+
+fn get_from_internal_file(maybe_path: &std::io::Result<PathBuf>) -> Option<std::io::Result<String>> {
+  let path = match maybe_path {
     Ok(path) => path,
-    Err(err) => return Some(Err(Error::new(ErrorKind::NotFound, format!("Error when getting ref -- {}", err).as_str())))
+    Err(err) => return Some(Err(Error::new(ErrorKind::NotFound, format!("Error when getting contents of internal file -- {}", err))))
   };
 
   if !path.is_file() {
@@ -109,19 +125,32 @@ pub fn get_ref(ref_variant: RefVariant) -> Option<std::io::Result<String>> {
   Some(fs::read_to_string(&path))
 }
 
+fn update_internal_file(maybe_path: &std::io::Result<PathBuf>, oid: &str) -> std::io::Result<()> {
+  let path = match maybe_path {
+    Ok(path) => path,
+    Err(err) => return Err(Error::new(ErrorKind::NotFound, format!("Error when getting contents of internal file -- {}", err)))
+  };
+
+  fs::write(&path, oid)?;
+  Ok(())
+}
+
+
 pub enum PathVariant<'a> {
+  Head,
+  Heads,
   Objects,
   OID(&'a str),
   Ref(RefVariant<'a>),
   Refs,
   Root,
+  Tags,
   Ugit,
 }
 
 pub enum RefVariant<'a> {
-  Head,
+  Head(&'a str),
   Tag(&'a str),
-  Tags,
 }
 
 pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
@@ -131,6 +160,15 @@ pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
   };
 
   let path = match variant {
+    PathVariant::Head => {
+      path.push("HEAD");
+      path
+    },
+    PathVariant::Heads => {
+      path.push("refs");
+      path.push("heads");
+      path
+    },
     PathVariant::Objects => {
       path.push("objects");
       path
@@ -142,17 +180,15 @@ pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
     },
     PathVariant::Ref(ref_variant) => {
       match ref_variant {
-        RefVariant::Head => {
-          path.push("HEAD");
+        RefVariant::Head(name) => {
+          path.push("refs");
+          path.push("heads");
+          path.push(name);
         },
         RefVariant::Tag(name) => {
           path.push("refs");
           path.push("tags");
           path.push(name);
-        },
-        RefVariant::Tags => {
-          path.push("refs");
-          path.push("tags");
         },
       };
 
@@ -163,6 +199,11 @@ pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
       path
     },
     PathVariant::Root => path.parent().unwrap().to_path_buf(),
+    PathVariant::Tags => {
+      path.push("refs");
+      path.push("tags");
+      path
+    },
     PathVariant::Ugit => path,
   };
 

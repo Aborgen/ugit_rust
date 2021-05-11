@@ -5,7 +5,7 @@ use clap::{App, Arg, SubCommand};
 
 use crate::base;
 use crate::data;
-use data::{ObjectType, RefVariant};
+use data::ObjectType;
 
 pub fn cli() -> std::io::Result<()> {
   let matches = App::new(env!("CARGO_PKG_NAME"))
@@ -76,16 +76,16 @@ pub fn cli() -> std::io::Result<()> {
   }
   else if let Some(matches) = matches.subcommand_matches("cat-file") {
     // Can simply unwrap, as OID arg's presence is required by clap
-    let oid = matches.value_of("OID").unwrap();
-    cat_file(oid)?;
+    let oid = base::try_resolve_as_ref(matches.value_of("OID").unwrap())?;
+    cat_file(&oid)?;
   }
   else if let Some(_) = matches.subcommand_matches("write-tree") {
     write_tree()?;
   }
   else if let Some(matches) = matches.subcommand_matches("read-tree") {
     // Can simply unwrap, as OID arg's presence is required by clap
-    let oid = matches.value_of("OID").unwrap();
-    read_tree(oid)?;
+    let oid = base::try_resolve_as_ref(matches.value_of("OID").unwrap())?;
+    read_tree(&oid)?;
   }
   else if let Some(matches) = matches.subcommand_matches("commit") {
     // Can simply unwrap, as TEXT arg's presence is required by clap
@@ -98,8 +98,8 @@ pub fn cli() -> std::io::Result<()> {
   }
   else if let Some(matches) = matches.subcommand_matches("checkout") {
     // Can simply unwrap, as OID arg's presence is required by clap
-    let oid = matches.value_of("OID").unwrap();
-    checkout(oid)?;
+    let oid = base::try_resolve_as_ref(matches.value_of("OID").unwrap())?;
+    checkout(&oid)?;
   }
   else if let Some(matches) = matches.subcommand_matches("tag") {
     // Can simply unwrap, as NAME arg's presence is required by clap
@@ -151,7 +151,7 @@ fn commit(message: &str) -> std::io::Result<()> {
 fn log(oid: Option<&str>) -> std::io::Result<()> {
   let oid = match oid {
     Some(oid) => String::from(oid),
-    None => match data::get_ref(RefVariant::Head) {
+    None => match data::get_head() {
       Some(oid) => oid?,
       None => return Ok(())
     }
@@ -159,6 +159,7 @@ fn log(oid: Option<&str>) -> std::io::Result<()> {
 
   let mut oid = Some(oid);
   while let Some(s) = oid {
+    let s = base::try_resolve_as_ref(&s)?;
     let commit = base::get_commit(&s)?;
     println!("commit {}", s);
     
@@ -183,10 +184,10 @@ fn checkout(oid: &str) -> std::io::Result<()> {
 fn tag(name: &str, oid: Option<&str>) -> std::io::Result<()> {
   let oid = match oid {
     Some(oid) => {
-      String::from(oid)
+      base::try_resolve_as_ref(oid)?
     },
     None => {
-      match data::get_ref(RefVariant::Head) {
+      match data::get_head() {
         Some(oid) => oid?,
         None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "A ugit repository does not exist"))
       }
