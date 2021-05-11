@@ -5,7 +5,7 @@ use clap::{App, Arg, SubCommand};
 
 use crate::base;
 use crate::data;
-use data::ObjectType;
+use data::{ObjectType, RefVariant};
 
 pub fn cli() -> std::io::Result<()> {
   let matches = App::new(env!("CARGO_PKG_NAME"))
@@ -151,7 +151,7 @@ fn commit(message: &str) -> std::io::Result<()> {
 fn log(oid: Option<&str>) -> std::io::Result<()> {
   let oid = match oid {
     Some(oid) => String::from(oid),
-    None => match data::get_ref("head") {
+    None => match data::get_ref(RefVariant::Head) {
       Some(oid) => oid?,
       None => return Ok(())
     }
@@ -186,7 +186,7 @@ fn tag(name: &str, oid: Option<&str>) -> std::io::Result<()> {
       String::from(oid)
     },
     None => {
-      match data::get_ref("head") {
+      match data::get_ref(RefVariant::Head) {
         Some(oid) => oid?,
         None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "A ugit repository does not exist"))
       }

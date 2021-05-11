@@ -4,10 +4,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::data;
-use data::{Commit, ObjectType};
+use data::{Commit, ObjectType, PathVariant, RefVariant};
 
 pub fn write_tree() -> std::io::Result<String> {
-  let path = data::generate_path(data::PathVariant::Root)?;
+  let path = data::generate_path(PathVariant::Root)?;
   write_tree_recursive(&path)
 }
 
@@ -27,7 +27,7 @@ pub fn read_tree(root_oid: &str) -> std::io::Result<()> {
 
 pub fn commit(message: &str) -> std::io::Result<String> {
   let oid = write_tree()?;
-  let commit = match data::get_ref("head") {
+  let commit = match data::get_ref(RefVariant::Head) {
     Some(head) => {
       let head = head?;
       format!("tree {}\nparent {}\n\n{}", oid, head, message)
@@ -36,7 +36,7 @@ pub fn commit(message: &str) -> std::io::Result<String> {
   };
 
   let oid = data::hash_object(commit.as_bytes(), ObjectType::Commit)?;
-  data::update_ref("head", &oid)?;
+  data::update_ref(RefVariant::Head, &oid)?;
   Ok(oid)
 }
 
@@ -84,11 +84,11 @@ pub fn get_commit(oid: &str) -> std::io::Result<Commit> {
 pub fn checkout(oid: &str) -> std::io::Result<()> {
   let commit = get_commit(oid)?;
   read_tree(&commit.tree)?;
-  data::update_ref("head", oid)
+  data::update_ref(RefVariant::Head, oid)
 }
 
 pub fn create_tag(name: &str, oid: &str) -> std::io::Result<()> {
-  unimplemented!();
+  data::update_ref(RefVariant::Tag(name), oid)
 }
 
 fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
@@ -309,7 +309,7 @@ mod tests {
     let dir_func = |node: &DirNode| {
       let path = Path::new(&node.name);
       let oid = write_tree_recursive(&path).expect("Issue when writing tree recursively");
-      let oid_file = data::generate_path(data::PathVariant::OID(&oid)).expect(format!("Issue when generating a path for OID {}", &oid).as_str());
+      let oid_file = data::generate_path(PathVariant::OID(&oid)).expect(format!("Issue when generating a path for OID {}", &oid).as_str());
       let contents = fs::read_to_string(&oid_file).expect(format!("Issue with reading OID [{}]", oid).as_str());
       // The file generated from write_tree_recursive represents the directory, and contains the oids, filenames, and directory names within it
       if let Some(children) = node.children.clone() {
@@ -327,7 +327,7 @@ mod tests {
         .expect(format!("Issue when reading test file {}", node.name).as_str());
 
       let oid = data::hash_object(&original_contents, ObjectType::Blob).expect("Issue when hashing object");
-      let oid_file = data::generate_path(data::PathVariant::OID(&oid)).expect(format!("Issue when generating a path for OID {}", &oid).as_str());
+      let oid_file = data::generate_path(PathVariant::OID(&oid)).expect(format!("Issue when generating a path for OID {}", &oid).as_str());
       let contents = fs::read(&oid_file)
         .expect("Issue when reading from OID");
 

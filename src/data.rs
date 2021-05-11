@@ -28,9 +28,12 @@ pub fn init() -> std::io::Result<()> {
   let mut root = env::current_dir().expect("Issue when getting cwd");
   root.push(GIT_DIR);
   fs::create_dir(&root)?;
-
+  // Create .ugit/objects
   fs::create_dir(generate_path(PathVariant::Objects)?)?;
+  // Create directories within .ugit/refs
   fs::create_dir(generate_path(PathVariant::Refs)?)?;
+  fs::create_dir(generate_path(PathVariant::Ref(RefVariant::Tags))?)?;
+
   return Ok(())
 }
 
@@ -87,14 +90,14 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
   Ok(String::from(content_parts[1]))
 }
 
-pub fn update_ref(name: &str, oid: &str) -> std::io::Result<()> {
-  let path = generate_path(PathVariant::Ref(name))?;
+pub fn update_ref(ref_variant: RefVariant, oid: &str) -> std::io::Result<()> {
+  let path = generate_path(PathVariant::Ref(ref_variant))?;
   fs::write(&path, oid)?;
   Ok(())
 }
 
-pub fn get_ref(name: &str) -> Option<std::io::Result<String>> {
-  let path = match generate_path(PathVariant::Ref(name)) {
+pub fn get_ref(ref_variant: RefVariant) -> Option<std::io::Result<String>> {
+  let path = match generate_path(PathVariant::Ref(ref_variant)) {
     Ok(path) => path,
     Err(err) => return Some(Err(Error::new(ErrorKind::NotFound, format!("Error when getting ref -- {}", err).as_str())))
   };
@@ -109,10 +112,16 @@ pub fn get_ref(name: &str) -> Option<std::io::Result<String>> {
 pub enum PathVariant<'a> {
   Objects,
   OID(&'a str),
-  Ref(&'a str),
+  Ref(RefVariant<'a>),
   Refs,
   Root,
   Ugit,
+}
+
+pub enum RefVariant<'a> {
+  Head,
+  Tag(&'a str),
+  Tags,
 }
 
 pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
@@ -131,14 +140,21 @@ pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
       path.push(oid);
       path
     },
-    PathVariant::Ref(head_or_oid) => {
-      if head_or_oid == "head" {
-        path.push("HEAD");
-      }
-      else {
-        path.push("refs");
-        path.push(head_or_oid);
-      }
+    PathVariant::Ref(ref_variant) => {
+      match ref_variant {
+        RefVariant::Head => {
+          path.push("HEAD");
+        },
+        RefVariant::Tag(name) => {
+          path.push("refs");
+          path.push("tags");
+          path.push(name);
+        },
+        RefVariant::Tags => {
+          path.push("refs");
+          path.push("tags");
+        },
+      };
 
       path
     },
