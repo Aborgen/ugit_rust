@@ -1,3 +1,4 @@
+use std::collections::{HashSet, VecDeque};
 use std::env;
 use std::io::{Error, ErrorKind};
 use std::fs;
@@ -80,6 +81,30 @@ pub fn get_commit(oid: &str) -> std::io::Result<Commit> {
       message,
     }
   )
+}
+
+pub fn get_commits_to_root(start_oid: &str) -> std::io::Result<Vec<(String, Commit)>> {
+  let mut queue = VecDeque::new();
+  queue.push_back(String::from(start_oid));
+  let mut visited = HashSet::new();
+  let mut commit_list = Vec::new();
+  while let Some(oid) = queue.pop_front() {
+    if visited.contains(&oid) {
+      continue;
+    }
+    else {
+      visited.insert(oid.clone());
+    }
+
+    let commit = get_commit(&oid)?;
+    if let Some(ref parent) = commit.parent {
+      queue.push_back(parent.clone());
+    }
+
+    commit_list.push((oid, commit));
+  }
+
+  Ok(commit_list)
 }
 
 pub fn checkout(oid: &str) -> std::io::Result<()> {

@@ -149,23 +149,16 @@ fn commit(message: &str) -> std::io::Result<()> {
 }
 
 fn log(oid: &str) -> std::io::Result<()> {
-  let mut oid = Some(String::from(oid));
-  while let Some(s) = oid {
-    let s = base::try_resolve_as_ref(&s)?;
-    let commit = base::get_commit(&s)?;
-    println!("commit {}", s);
+  for (oid, commit) in base::get_commits_to_root(oid)? {
+    println!("commit {}", &oid);
     
     for line in commit.message.lines() {
       print!("\n{fill}{}", line, fill=" ".repeat(10));
     }
 
-    oid = commit.parent;
-    if oid.is_some() {
-      println!("\n");
-    }
+    println!("\n");
   }
 
-  println!("");
   Ok(())
 }
 
