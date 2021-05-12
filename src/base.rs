@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::data;
 use crate::utils;
-use data::{Commit, ObjectType, PathVariant, RefVariant};
+use data::{Commit, ObjectType, PathVariant, RefVariant, RefValue};
 
 pub fn write_tree() -> std::io::Result<String> {
   let path = data::generate_path(PathVariant::Root)?;
@@ -114,28 +114,35 @@ pub fn checkout(oid: &str) -> std::io::Result<()> {
 }
 
 pub fn create_tag(name: &str, oid: &str) -> std::io::Result<()> {
-  data::update_ref(RefVariant::Tag(name), oid)
+  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), rtype: RefVariant::Tag(name) };
+  data::update_ref(&ref_value)
+}
+
+pub fn create_branch(name: &str, oid: &str) -> std::io::Result<()> {
+  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), rtype: RefVariant::Head(name) };
+  data::update_ref(&ref_value)
+}
+
+fn foo(ref_variant: RefVariant) -> std::io::Result<Option<String>> {
+  match data::get_ref(ref_variant) {
+    Ok(ref_value) => Ok(ref_value.value),
+    Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve ref {:?}, an error occured: {}", ref_variant, err)))
+  }
 }
 
 pub fn try_resolve_as_ref(the_ref: &str) -> std::io::Result<String> {
   let oid = {
-    if let Some(possible_oid) = data::get_ref(RefVariant::Tag(the_ref)) {
-      match possible_oid {
-        Ok(oid) => oid,
-        Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve tag {}, an error occured: {}", the_ref, err)))
-      }
+    if let Some(value) = foo(RefVariant::Tag(the_ref))? {
+      String::from(value)
     }
-    else if let Some(possible_oid) = data::get_ref(RefVariant::Head(the_ref)) {
-      match possible_oid {
-        Ok(oid) => oid,
-        Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve head {}, an error occured: {}", the_ref, err)))
-      }
+    else if let Some(value) = foo(RefVariant::Head(the_ref))? {
+      String::from(value)
     }
     else if the_ref == "HEAD" || the_ref == "@" {
-      if let Some(possible_oid) = data::get_head() {
-        match possible_oid {
-          Ok(oid) => oid,
-          Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve {}, an error occured: {}", the_ref, err)))
+      if let Some(possible_ref) = data::get_head() {
+        match possible_ref {
+          Ok(value) => value,
+          Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve {:?}, an error occured: {}", the_ref, err)))
         }
       }
       else {

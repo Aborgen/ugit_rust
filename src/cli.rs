@@ -61,7 +61,17 @@ pub fn cli() -> std::io::Result<()> {
         .required(true)
         .index(1))
       .arg(Arg::with_name("OID")
-        .help("The optional commit OID to be aliased")
+        .help("An optional commit OID to be aliased")
+        .required(false)
+        .index(2)))
+    .subcommand(SubCommand::with_name("branch")
+      .about("Creates a new branch")
+      .arg(Arg::with_name("NAME")
+        .help("The name of the branch to be created")
+        .required(true)
+        .index(1))
+      .arg(Arg::with_name("OID")
+        .help("An optional commit OID for the branch to be started from")
         .required(false)
         .index(2)))
     .get_matches();
@@ -106,6 +116,12 @@ pub fn cli() -> std::io::Result<()> {
     let name = matches.value_of("NAME").unwrap();
     let oid = base::try_resolve_as_ref(matches.value_of("OID").unwrap_or("@"))?;
     tag(&name, &oid)?;
+  }
+  else if let Some(matches) = matches.subcommand_matches("branch") {
+    // Can simply unwrap, as NAME arg's presence is required by clap
+    let name = matches.value_of("NAME").unwrap();
+    let oid = base::try_resolve_as_ref(matches.value_of("OID").unwrap_or("@"))?;
+    branch(&name, &oid)?;
   }
 
   Ok(())
@@ -168,4 +184,8 @@ fn checkout(oid: &str) -> std::io::Result<()> {
 
 fn tag(name: &str, oid: &str) -> std::io::Result<()> {
   base::create_tag(name, &oid)
+}
+
+fn branch(name: &str, oid: &str) -> std::io::Result<()> {
+  base::create_branch(name, &oid)
 }

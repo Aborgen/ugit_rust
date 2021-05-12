@@ -92,14 +92,28 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
   Ok(String::from(content_parts[1]))
 }
 
-pub fn update_ref(ref_variant: RefVariant, oid: &str) -> std::io::Result<()> {
-  let maybe_path = generate_path(PathVariant::Ref(ref_variant));
-  update_internal_file(&maybe_path, oid)
+pub fn update_ref(ref_value: &RefValue) -> std::io::Result<()> {
+  if ref_value.symbolic {
+    panic!("This method may not be called with a symbolic ref [{:?}]", ref_value.value);
+  }
+
+  let maybe_path = generate_path(PathVariant::Ref(ref_value.rtype));
+  if let Some(ref value) = ref_value.value {
+    update_internal_file(&maybe_path, &value)
+  }
+  else {
+    panic!("Tried to update ref with an empty ref: {:?}", ref_value);
+  }
 }
 
-pub fn get_ref(ref_variant: RefVariant) -> Option<std::io::Result<String>> {
+pub fn get_ref(ref_variant: RefVariant) -> std::io::Result<RefValue> {
   let maybe_path = generate_path(PathVariant::Ref(ref_variant));
-  get_from_internal_file(&maybe_path)
+  let value = match get_from_internal_file(&maybe_path) {
+    Some(value) => Some(value?),
+    None => None
+  };
+
+  Ok(RefValue { symbolic: false, value, rtype: ref_variant })
 }
 
 pub fn set_head(oid: &str) -> std::io::Result<()> {
@@ -122,7 +136,20 @@ fn get_from_internal_file(maybe_path: &std::io::Result<PathBuf>) -> Option<std::
     return None;
   }
 
-  Some(fs::read_to_string(&path))
+  let contents = fs::read_to_string(&path);
+  match contents {
+    Err(err) => return Some(Err(Error::new(err.kind(), format!("Error when reading from {} -- {}", path.display(), err)))),
+    Ok(contents) => {
+      if contents.starts_with("ref:") {
+        let content_parts: Vec<&str> = contents.splitn(2, ":").collect();
+        let path = PathBuf::from(content_parts[1]);
+        return get_from_internal_file(&Ok(path));
+      }
+      else {
+        return Some(Ok(contents));
+      }
+    }
+  };
 }
 
 fn update_internal_file(maybe_path: &std::io::Result<PathBuf>, oid: &str) -> std::io::Result<()> {
@@ -148,9 +175,17 @@ pub enum PathVariant<'a> {
   Ugit,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub enum RefVariant<'a> {
   Head(&'a str),
   Tag(&'a str),
+}
+
+#[derive(Clone, Debug)]
+pub struct RefValue<'a> {
+  pub symbolic: bool,
+  pub value: Option<String>,
+  pub rtype: RefVariant<'a>,
 }
 
 pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
