@@ -114,12 +114,34 @@ pub fn checkout(oid: &str) -> std::io::Result<()> {
 }
 
 pub fn create_tag(name: &str, oid: &str) -> std::io::Result<()> {
-  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), rtype: RefVariant::Tag(name) };
+  let ref_value = match data::get_ref(RefVariant::Tag(name)) {
+    Err(err) => return Err(Error::new(err.kind(), format!("While trying to create a new tag [{}|{}], an error occured: {}", name, oid, err))),
+    Ok(ref_value) => {
+      if ref_value.value.is_none() {
+        RefValue { symbolic: false, value: Some(String::from(oid)), rtype: RefVariant::Tag(name) }
+      }
+      else {
+        ref_value
+      }
+    }
+  };
+
   data::update_ref(&ref_value)
 }
 
 pub fn create_branch(name: &str, oid: &str) -> std::io::Result<()> {
-  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), rtype: RefVariant::Head(name) };
+  let ref_value = match data::get_ref(RefVariant::Head(name)) {
+    Err(err) => return Err(Error::new(err.kind(), format!("While trying to create a new branch [{}|{}], an error occured: {}", name, oid, err))),
+    Ok(ref_value) => {
+      if ref_value.value.is_none() {
+        RefValue { symbolic: false, value: Some(String::from(oid)), rtype: RefVariant::Head(name) }
+      }
+      else {
+        ref_value
+      }
+    }
+  };
+
   data::update_ref(&ref_value)
 }
 

@@ -97,8 +97,8 @@ pub fn update_ref(ref_value: &RefValue) -> std::io::Result<()> {
     panic!("This method may not be called with a symbolic ref [{:?}]", ref_value.value);
   }
 
-  let maybe_path = generate_path(PathVariant::Ref(ref_value.rtype));
   if let Some(ref value) = ref_value.value {
+    let maybe_path = generate_path(PathVariant::Ref(ref_value.rtype));
     update_internal_file(&maybe_path, &value)
   }
   else {
@@ -129,7 +129,7 @@ pub fn get_head() -> Option<std::io::Result<String>> {
 fn get_from_internal_file(maybe_path: &std::io::Result<PathBuf>) -> Option<std::io::Result<String>> {
   let path = match maybe_path {
     Ok(path) => path,
-    Err(err) => return Some(Err(Error::new(ErrorKind::NotFound, format!("Error when getting contents of internal file -- {}", err))))
+    Err(err) => return Some(Err(Error::new(err.kind(), format!("Error when getting contents of internal file -- {}", err))))
   };
 
   if !path.is_file() {
@@ -155,7 +155,7 @@ fn get_from_internal_file(maybe_path: &std::io::Result<PathBuf>) -> Option<std::
 fn update_internal_file(maybe_path: &std::io::Result<PathBuf>, oid: &str) -> std::io::Result<()> {
   let path = match maybe_path {
     Ok(path) => path,
-    Err(err) => return Err(Error::new(ErrorKind::NotFound, format!("Error when getting contents of internal file -- {}", err)))
+    Err(err) => return Err(Error::new(err.kind(), format!("Error when getting contents of internal file -- {}", err)))
   };
 
   fs::write(&path, oid)?;
