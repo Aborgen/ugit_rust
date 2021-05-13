@@ -138,18 +138,18 @@ fn get_from_internal_file(maybe_path: &std::io::Result<PathBuf>) -> Option<std::
 
   let contents = fs::read_to_string(&path);
   match contents {
-    Err(err) => return Some(Err(Error::new(err.kind(), format!("Error when reading from {} -- {}", path.display(), err)))),
+    Err(err) => Some(Err(Error::new(err.kind(), format!("Error when reading from {} -- {}", path.display(), err)))),
     Ok(contents) => {
       if contents.starts_with("ref:") {
         let content_parts: Vec<&str> = contents.splitn(2, ":").collect();
         let path = PathBuf::from(content_parts[1]);
-        return get_from_internal_file(&Ok(path));
+        get_from_internal_file(&Ok(path))
       }
       else {
-        return Some(Ok(contents));
+        Some(Ok(contents))
       }
     }
-  };
+  }
 }
 
 fn update_internal_file(maybe_path: &std::io::Result<PathBuf>, oid: &str) -> std::io::Result<()> {
