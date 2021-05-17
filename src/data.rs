@@ -162,6 +162,46 @@ fn update_internal_file(maybe_path: &std::io::Result<PathBuf>, oid: &str) -> std
   Ok(())
 }
 
+pub fn get_contents_from_ref(s: &str) -> std::io::Result<String> {
+  let path = locate_ref_or_oid(s)?;
+  match fs::read_to_string(&path) {
+    Ok(contents) => Ok(contents),
+    Err(err) => Err(Error::new(err.kind(), format!("An error occured while getting contents from {}", path.display())))
+  }
+}
+
+pub fn locate_ref_or_oid(s: &str) -> std::io::Result<PathBuf> {
+  let mut count_of_refs_located = 0;
+  let mut ret_path = None;
+  if let Ok(path) = generate_path(PathVariant::Ref(RefVariant::Tag(s))) {
+    count_of_refs_located += 1;
+    ret_path = Some(path);
+  }
+  if let Ok(path) = generate_path(PathVariant::Ref(RefVariant::Head(s))) {
+    count_of_refs_located += 1;
+    ret_path = Some(path);
+  }
+  if s == "HEAD" || s == "@" {
+    if let Ok(path) = generate_path(PathVariant::Head) {
+      count_of_refs_located += 1;
+      ret_path = Some(path);
+    }
+  }
+  if let Ok(path) = generate_path(PathVariant::OID(s)) {
+    count_of_refs_located += 1;
+    ret_path = Some(path);
+  }
+
+  match ret_path {
+    None => Err(Error::new(ErrorKind::InvalidInput, format!("Unrecognized ref {}", s))),
+    Some(path) => if count_of_refs_located > 1 {
+      Err(Error::new(ErrorKind::InvalidInput, format!("Ref '{}' is ambiguous", s)))
+    }
+    else {
+      Ok(path)
+    }
+  }
+}
 
 pub enum PathVariant<'a> {
   Head,
