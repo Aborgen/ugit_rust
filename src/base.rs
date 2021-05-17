@@ -146,40 +146,8 @@ pub fn create_branch(name: &str, oid: &str) -> std::io::Result<()> {
 }
 
 pub fn try_resolve_as_ref(the_ref: &str) -> std::io::Result<String> {
-  let oid = {
-    if let Some(value) = try_get_ref_or_err(RefVariant::Tag(the_ref))? {
-      String::from(value)
-    }
-    else if let Some(value) = try_get_ref_or_err(RefVariant::Head(the_ref))? {
-      String::from(value)
-    }
-    else if the_ref == "HEAD" || the_ref == "@" {
-      if let Some(possible_ref) = data::get_head() {
-        match possible_ref {
-          Ok(value) => value,
-          Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve {:?}, an error occured: {}", the_ref, err)))
-        }
-      }
-      else {
-        return Err(Error::new(ErrorKind::NotFound, "While trying to resolve as ref: HEAD does not exist"));
-      }
-    }
-    else if utils::is_hex(the_ref) {
-      String::from(the_ref)
-    }
-    else {
-      return Err(Error::new(ErrorKind::InvalidInput, format!("Unrecognized name {}", the_ref)));
-    }
-  };
-
+  let oid = data::get_contents_from_ref(the_ref)?;
   Ok(oid)
-}
-
-fn try_get_ref_or_err(ref_variant: RefVariant) -> std::io::Result<Option<String>> {
-  match data::get_ref(ref_variant) {
-    Ok(ref_value) => Ok(ref_value.value),
-    Err(err) => return Err(Error::new(err.kind(), format!("While trying to resolve ref {:?}, an error occured: {}", ref_variant, err)))
-  }
 }
 
 fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
