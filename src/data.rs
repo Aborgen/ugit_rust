@@ -106,14 +106,11 @@ pub fn update_ref(ref_value: &RefValue) -> std::io::Result<()> {
   }
 }
 
-pub fn get_ref(ref_variant: RefVariant) -> std::io::Result<RefValue> {
-  let maybe_path = generate_path(PathVariant::Ref(ref_variant));
-  let value = match get_from_internal_file(&maybe_path) {
-    Some(value) => Some(value?),
-    None => None
-  };
-
-  Ok(RefValue { symbolic: false, value, rtype: ref_variant })
+pub fn get_ref(path: &Path, deref: bool) -> std::io::Result<RefValue> {
+  match get_ref_file(&path, deref) {
+    Some(maybe_ref_value) => maybe_ref_value,
+    None => Ok(RefValue { symbolic: false, value: None, path: path.clone().to_path_buf() })
+  }
 }
 
 pub fn set_head(oid: &str) -> std::io::Result<()> {
@@ -132,21 +129,51 @@ fn get_from_internal_file(maybe_path: &std::io::Result<PathBuf>) -> Option<std::
     Err(err) => return Some(Err(Error::new(err.kind(), format!("Error when getting contents of internal file -- {}", err))))
   };
 
+  match get_ref_file(&path, false) {
+    None => None,
+    Some(maybe_ref_value) => {
+      match maybe_ref_value {
+        Ok(ref_value) => match ref_value.value {
+          Some(value) => Some(Ok(value)),
+          None => None
+        },
+        Err(err) => Some(Err(Error::new(err.kind(), format!("Error while getting contents of HEAD -- {}", err))))
+      }
+    }
+  }
+}
+
+fn get_ref_file(path: &Path, deref: bool) -> Option<std::io::Result<RefValue>> {
   if !path.is_file() {
     return None;
   }
 
-  let contents = fs::read_to_string(&path);
-  match contents {
-    Err(err) => Some(Err(Error::new(err.kind(), format!("Error when reading from {} -- {}", path.display(), err)))),
+  let value = match recur_deref(path, deref) {
+    Ok(value) => value,
+    Err(err) => return Some(Err(err))
+  };
+
+  let symbolic = value.starts_with("ref:");
+  let ref_value = RefValue { symbolic, value: Some(value), path: path.clone().to_path_buf() };
+  Some(Ok(ref_value))
+}
+
+fn recur_deref(path: &Path, deref: bool) -> std::io::Result<String> {
+  match fs::read_to_string(&path) {
+    Err(err) => return Err(Error::new(err.kind(), format!("Error when reading from {} (recursive) -- {}", path.display(), err))),
     Ok(contents) => {
       if contents.starts_with("ref:") {
         let content_parts: Vec<&str> = contents.splitn(2, ":").collect();
-        let path = PathBuf::from(content_parts[1]);
-        get_from_internal_file(&Ok(path))
+        if deref {
+          let path = PathBuf::from(content_parts[1]);
+          recur_deref(&path, deref)
+        }
+        else {
+          Ok(String::from(content_parts[1]))
+        }
       }
       else {
-        Some(Ok(contents))
+        Ok(contents)
       }
     }
   }
@@ -170,35 +197,50 @@ pub fn get_contents_from_ref(s: &str) -> std::io::Result<String> {
   }
 }
 
-pub fn locate_ref_or_oid(s: &str) -> std::io::Result<PathBuf> {
-  let mut count_of_refs_located = 0;
-  let mut ret_path = None;
-  if let Ok(path) = generate_path(PathVariant::Ref(RefVariant::Tag(s))) {
-    count_of_refs_located += 1;
-    ret_path = Some(path);
-  }
-  if let Ok(path) = generate_path(PathVariant::Ref(RefVariant::Head(s))) {
-    count_of_refs_located += 1;
-    ret_path = Some(path);
-  }
-  if s == "HEAD" || s == "@" {
-    if let Ok(path) = generate_path(PathVariant::Head) {
-      count_of_refs_located += 1;
-      ret_path = Some(path);
-    }
-  }
-  if let Ok(path) = generate_path(PathVariant::OID(s)) {
-    count_of_refs_located += 1;
-    ret_path = Some(path);
+pub fn locate_ref_or_oid(s: &str) -> Option<std::io::Result<String>> {
+  if !repository_initialized() {
+    return Some(Err(Error::new(ErrorKind::NotFound, "A ugit repository does not exist")));
   }
 
-  match ret_path {
-    None => Err(Error::new(ErrorKind::InvalidInput, format!("Unrecognized ref {}", s))),
-    Some(path) => if count_of_refs_located > 1 {
-      Err(Error::new(ErrorKind::InvalidInput, format!("Ref '{}' is ambiguous", s)))
+  let get_ref_from_variant = |path_variant: PathVariant| get_ref_file(&generate_path(path_variant).unwrap(), false); 
+
+  let mut count_of_refs_located = 0;
+  let mut ret_ref_value = None;
+  if let Some(maybe_ref_value) = get_ref_from_variant(PathVariant::Ref(RefVariant::Tag(s))) {
+    if let Ok(ref_value) = maybe_ref_value {
+      count_of_refs_located += 1;
+      ret_ref_value = Some(ref_value);
+    }
+  }
+  if let Some(maybe_ref_value) = get_ref_from_variant(PathVariant::Ref(RefVariant::Head(s))) {
+    if let Ok(ref_value) = maybe_ref_value {
+      count_of_refs_located += 1;
+      ret_ref_value = Some(ref_value);
+    }
+  }
+  if let Some(maybe_ref_value) = get_ref_from_variant(PathVariant::OID(s)) {
+    if let Ok(ref_value) = maybe_ref_value {
+      count_of_refs_located += 1;
+      ret_ref_value = Some(ref_value);
+    }
+  }
+  if s == "HEAD" || s == "@" {
+    if let Some(maybe_ref_value) = get_ref_from_variant(PathVariant::Head) {
+      if let Ok(ref_value) = maybe_ref_value {
+        count_of_refs_located += 1;
+        ret_ref_value = Some(ref_value);
+      }
+    }
+  }
+
+  match ret_ref_value {
+    None => None,
+    Some(ref_value) => if count_of_refs_located > 1 {
+      Some(Err(Error::new(ErrorKind::InvalidInput, format!("Ref '{}' is ambiguous", s))))
     }
     else {
-      Ok(path)
+      let oid = ref_value.value.unwrap();
+      Some(Ok(oid))
     }
   }
 }
@@ -222,10 +264,10 @@ pub enum RefVariant<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct RefValue<'a> {
+pub struct RefValue {
   pub symbolic: bool,
   pub value: Option<String>,
-  pub rtype: RefVariant<'a>,
+  pub path: PathBuf,
 }
 
 pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {

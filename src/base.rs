@@ -145,9 +145,14 @@ pub fn create_branch(name: &str, oid: &str) -> std::io::Result<()> {
   data::update_ref(&ref_value)
 }
 
-pub fn try_resolve_as_ref(the_ref: &str) -> std::io::Result<String> {
-  let oid = data::get_contents_from_ref(the_ref)?;
-  Ok(oid)
+pub fn try_resolve_as_ref(ref_or_oid: &str) -> std::io::Result<String> {
+  let oid = data::locate_ref_or_oid(ref_or_oid);
+  match oid {
+    Some(oid) => {
+      oid
+    },
+    None => Ok(String::from(ref_or_oid))
+  }
 }
 
 fn write_tree_recursive(path: &Path) -> std::io::Result<String> {
@@ -416,7 +421,6 @@ mod tests {
     read_tree(&oid).expect("Issue when restoring from write_tree snapshot");
     let dir_func = |node: &DirNode| {
       let path = Path::new(&node.name);
-      println!("is {} in {}", path.display(), env::current_dir().unwrap().display());
       assert!(path.is_dir());
       true
     };
