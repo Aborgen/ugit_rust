@@ -1,9 +1,11 @@
 use std::env;
 use std::fs;
 use std::io::{Error, ErrorKind};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
+
+use crate::utils;
 
 static GIT_DIR: &str = ".ugit";
 
@@ -98,8 +100,7 @@ pub fn update_ref(ref_value: &RefValue) -> std::io::Result<()> {
   }
 
   if let Some(ref value) = ref_value.value {
-    let maybe_path = generate_path(PathVariant::Ref(ref_value.rtype));
-    update_internal_file(&maybe_path, &value)
+    update_ref_file(&ref_value.path, value)
   }
   else {
     panic!("Tried to update ref with an empty ref: {:?}", ref_value);
@@ -114,19 +115,18 @@ pub fn get_ref(path: &Path, deref: bool) -> std::io::Result<RefValue> {
 }
 
 pub fn set_head(oid: &str) -> std::io::Result<()> {
-  let maybe_path = generate_path(PathVariant::Head);
-  update_internal_file(&maybe_path, oid)
+  let path = match generate_path(PathVariant::Head) {
+    Ok(path) => path,
+    Err(err) => return Err(Error::new(err.kind(), format!("Error when setting contents of HEAD -- {}", err)))
+  };
+
+  update_ref_file(&path, oid)
 }
 
 pub fn get_head() -> Option<std::io::Result<String>> {
-  let maybe_path = generate_path(PathVariant::Head);
-  get_from_internal_file(&maybe_path)
-}
-
-fn get_from_internal_file(maybe_path: &std::io::Result<PathBuf>) -> Option<std::io::Result<String>> {
-  let path = match maybe_path {
+  let path = match generate_path(PathVariant::Head) {
     Ok(path) => path,
-    Err(err) => return Some(Err(Error::new(err.kind(), format!("Error when getting contents of internal file -- {}", err))))
+    Err(err) => return Some(Err(Error::new(err.kind(), format!("Error when getting contents of HEAD -- {}", err))))
   };
 
   match get_ref_file(&path, false) {
@@ -179,21 +179,42 @@ fn recur_deref(path: &Path, deref: bool) -> std::io::Result<String> {
   }
 }
 
-fn update_internal_file(maybe_path: &std::io::Result<PathBuf>, oid: &str) -> std::io::Result<()> {
-  let path = match maybe_path {
-    Ok(path) => path,
-    Err(err) => return Err(Error::new(err.kind(), format!("Error when getting contents of internal file -- {}", err)))
-  };
+fn update_ref_file(path: &Path, oid: &str) -> std::io::Result<()> {
+  if !validate_user_given_ref(oid) {
+    panic!("Tried to create a ref for something that is not a commit or another ref at {}", path.display());
+  }
 
   fs::write(&path, oid)?;
   Ok(())
 }
 
-pub fn get_contents_from_ref(s: &str) -> std::io::Result<String> {
-  let path = locate_ref_or_oid(s)?;
-  match fs::read_to_string(&path) {
-    Ok(contents) => Ok(contents),
-    Err(err) => Err(Error::new(err.kind(), format!("An error occured while getting contents from {}", path.display())))
+// Refs may only point to commits or to other refs. This function is meant to check inside a given OID to see if it contains either of those.
+fn validate_user_given_ref(oid: &str) -> bool {
+  let path = generate_path(PathVariant::OID(oid)).unwrap();
+  let contents = match fs::read(&path) {
+    Ok(contents) => contents,
+    Err(_) => return false
+  };
+
+  match String::from_utf8(contents.clone()) {
+    Ok(s) => {
+      // In this case, the given OID is a ref which is pointing to another OID.
+      if utils::is_hex(&s) {
+        return true;
+      }
+    },
+    Err(_) => ()
+  };
+
+  let content_parts: Vec<_> = contents
+    .splitn(2, |b| *b == b'\0')
+    .collect();
+
+  if content_parts[0] == b"commit" {
+    true
+  }
+  else {
+    false
   }
 }
 
