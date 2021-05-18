@@ -5,7 +5,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::data;
-use crate::utils;
 use data::{Commit, ObjectType, PathVariant, RefVariant, RefValue};
 
 pub fn write_tree() -> std::io::Result<String> {
@@ -114,34 +113,26 @@ pub fn checkout(oid: &str) -> std::io::Result<()> {
 }
 
 pub fn create_tag(name: &str, oid: &str) -> std::io::Result<()> {
-  let ref_value = match data::get_ref(RefVariant::Tag(name)) {
-    Err(err) => return Err(Error::new(err.kind(), format!("While trying to create a new tag [{}|{}], an error occured: {}", name, oid, err))),
-    Ok(ref_value) => {
-      if ref_value.value.is_none() {
-        RefValue { symbolic: false, value: Some(String::from(oid)), rtype: RefVariant::Tag(name) }
-      }
-      else {
-        ref_value
-      }
-    }
+  let path = data::generate_path(PathVariant::Ref(RefVariant::Tag(name)))?;
+  // Using get_ref here to drill down to the commit, in the case that oid is a symbolic ref.
+  let ref_path = match data::get_ref(&path, true) {
+    Ok(ref_value) => ref_value.path,
+    Err(err) => return Err(Error::new(err.kind(), format!("While trying to create a new tag ['{}'|{}], an error occured: {}", name, oid, err)))
   };
 
+  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), path: ref_path };
   data::update_ref(&ref_value)
 }
 
 pub fn create_branch(name: &str, oid: &str) -> std::io::Result<()> {
-  let ref_value = match data::get_ref(RefVariant::Head(name)) {
-    Err(err) => return Err(Error::new(err.kind(), format!("While trying to create a new branch [{}|{}], an error occured: {}", name, oid, err))),
-    Ok(ref_value) => {
-      if ref_value.value.is_none() {
-        RefValue { symbolic: false, value: Some(String::from(oid)), rtype: RefVariant::Head(name) }
-      }
-      else {
-        ref_value
-      }
-    }
+  let path = data::generate_path(PathVariant::Ref(RefVariant::Head(name)))?;
+  // Using get_ref here to drill down to the commit, in the case that oid is a symbolic ref.
+  let ref_path = match data::get_ref(&path, true) {
+    Ok(ref_value) => ref_value.path,
+    Err(err) => return Err(Error::new(err.kind(), format!("While trying to create a new branch ['{}'|{}], an error occured: {}", name, oid, err)))
   };
 
+  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), path: ref_path };
   data::update_ref(&ref_value)
 }
 
