@@ -95,12 +95,15 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
 }
 
 pub fn update_ref(ref_value: &RefValue) -> std::io::Result<()> {
-  if ref_value.symbolic {
-    panic!("This method may not be called with a symbolic ref [{:?}]", ref_value.value);
-  }
-
   if let Some(ref value) = ref_value.value {
-    update_ref_file(&ref_value.path, value)
+    let value = if ref_value.symbolic {
+      format!("ref:{}", value)
+    }
+    else {
+      String::from(value)
+    };
+
+    update_ref_file(&ref_value.path, &value)
   }
   else {
     panic!("Tried to update ref with an empty ref: {:?}", ref_value);
