@@ -392,15 +392,13 @@ mod tests {
   #[test]
   #[serial]
   fn hash_object_subcommand_creates_copy_of_file_named_as_hash_of_same_file() {
-    let test_file = Path::new("test.txt");
     let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
     let test_text_as_hash = "bac94dbaf28c6916ef33cad50e4e1e88c3834f51dc7a5d40702a5cfdf324ab72";
     create_test_directory();
     {
       let path_with_hash = generate_path(PathVariant::OID(test_text_as_hash)).unwrap();
-      fs::write(test_file, test_text).unwrap();
-
       hash_object(test_text.as_bytes(), ObjectType::Blob).unwrap();
+
       assert!(path_with_hash.is_file());
       let contents = fs::read_to_string(path_with_hash).unwrap();
       assert_eq!(contents, format!("blob\0{}", test_text));
@@ -411,16 +409,14 @@ mod tests {
   #[test]
   #[serial]
   fn get_object_subcommand_returns_contents_of_file_with_specified_oid_hash() {
-    let test_file = Path::new("test.txt");
     let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
     let test_text_as_hash = "bac94dbaf28c6916ef33cad50e4e1e88c3834f51dc7a5d40702a5cfdf324ab72";
     create_test_directory();
     {
-      fs::write(test_file, test_text).unwrap();
       hash_object(test_text.as_bytes(), ObjectType::Blob).unwrap();
 
       let contents = get_object(test_text_as_hash, ObjectType::Blob).unwrap();
-      assert_eq!(&contents, test_text);
+      assert_eq!(contents, test_text);
     }
     delete_test_directory();
   }
