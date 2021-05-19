@@ -114,26 +114,14 @@ pub fn checkout(oid: &str) -> std::io::Result<()> {
 
 pub fn create_tag(name: &str, oid: &str) -> std::io::Result<()> {
   let path = data::generate_path(PathVariant::Ref(RefVariant::Tag(name)))?;
-  // Using get_ref here to drill down to the commit, in the case that oid is a symbolic ref.
-  let ref_path = match data::get_ref(&path, true) {
-    Ok(ref_value) => ref_value.path,
-    Err(err) => return Err(Error::new(err.kind(), format!("While trying to create a new tag ['{}'|{}], an error occured: {}", name, oid, err)))
-  };
-
-  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), path: ref_path };
-  data::update_ref(&ref_value)
+  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), path };
+  data::update_ref(&ref_value, true)
 }
 
 pub fn create_branch(name: &str, oid: &str) -> std::io::Result<()> {
   let path = data::generate_path(PathVariant::Ref(RefVariant::Head(name)))?;
-  // Using get_ref here to drill down to the commit, in the case that oid is a symbolic ref.
-  let ref_path = match data::get_ref(&path, true) {
-    Ok(ref_value) => ref_value.path,
-    Err(err) => return Err(Error::new(err.kind(), format!("While trying to create a new branch ['{}'|{}], an error occured: {}", name, oid, err)))
-  };
-
-  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), path: ref_path };
-  data::update_ref(&ref_value)
+  let ref_value = RefValue { symbolic: false, value: Some(String::from(oid)), path };
+  data::update_ref(&ref_value, true)
 }
 
 pub fn try_resolve_as_ref(ref_or_oid: &str) -> std::io::Result<String> {

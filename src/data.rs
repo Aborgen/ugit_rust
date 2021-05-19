@@ -94,7 +94,14 @@ pub fn get_object(oid: &str, expected_type: ObjectType) -> std::io::Result<Strin
   Ok(String::from(content_parts[1]))
 }
 
-pub fn update_ref(ref_value: &RefValue) -> std::io::Result<()> {
+pub fn update_ref(ref_value: &RefValue, deref: bool) -> std::io::Result<()> {
+  // Using get_ref here to drill down to the commit, in the case that ref_value.path contains a symbolic ref.
+  let path = match get_ref(&ref_value.path, deref) {
+    Ok(ref_value) => ref_value.path,
+    Err(err) => return Err(
+      Error::new(err.kind(), format!("While trying to update ref ['{}'|{:?}], an error occured: {}", ref_value.path.display(), ref_value.value, err)))
+  };
+
   if let Some(ref value) = ref_value.value {
     let value = if ref_value.symbolic {
       format!("ref:{}", value)
@@ -103,7 +110,7 @@ pub fn update_ref(ref_value: &RefValue) -> std::io::Result<()> {
       String::from(value)
     };
 
-    update_ref_file(&ref_value.path, &value)
+    update_ref_file(&path, &value)
   }
   else {
     panic!("Tried to update ref with an empty ref: {:?}", ref_value);
@@ -193,6 +200,12 @@ fn update_ref_file(path: &Path, oid: &str) -> std::io::Result<()> {
 
 // Refs may only point to commits or to other refs. This function is meant to check inside a given OID to see if it contains either of those.
 fn validate_user_given_ref(oid: &str) -> bool {
+  let oid = if oid.starts_with("ref:") {
+    oid.splitn(2, "ref:").collect::<Vec<&str>>()[1]
+  } else {
+    oid
+  };
+
   let path = generate_path(PathVariant::OID(oid)).unwrap();
   let contents = match fs::read(&path) {
     Ok(contents) => contents,
@@ -278,6 +291,7 @@ pub enum PathVariant<'a> {
   Refs,
   Root,
   Tags,
+  #[cfg(test)]
   Ugit,
 }
 
@@ -345,6 +359,7 @@ pub fn generate_path(variant: PathVariant) -> std::io::Result<PathBuf> {
       path.push("tags");
       path
     },
+    #[cfg(test)]
     PathVariant::Ugit => path,
   };
 
@@ -417,6 +432,69 @@ mod tests {
 
       let contents = get_object(test_text_as_hash, ObjectType::Blob).unwrap();
       assert_eq!(contents, test_text);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn update_ref_creates_a_ref_to_a_commit() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+      let path = generate_path(PathVariant::Ref(RefVariant::Tag("Test tag"))).unwrap();
+      let ref_value = RefValue { symbolic: false, value: Some(commit_oid.clone()), path: path.clone() };
+      update_ref(&ref_value, true).expect("Issue when updating ref");
+
+      let contents = fs::read_to_string(path).unwrap();
+      assert_eq!(contents, commit_oid);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn update_ref_creates_a_symbolic_ref_to_a_commit() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+      let path = generate_path(PathVariant::Ref(RefVariant::Head("Test branch"))).unwrap();
+      let ref_value = RefValue { symbolic: true, value: Some(commit_oid.clone()), path: path.clone() };
+      update_ref(&ref_value, true).expect("Issue when updating ref");
+
+      let contents = fs::read_to_string(path).unwrap();
+      let content_parts: Vec<_> = contents.splitn(2, ":").collect();
+      assert_eq!(content_parts[0], "ref");
+      assert_eq!(content_parts[1], commit_oid);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn update_ref_creates_a_ref_to_another_ref() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let ref_name = "Test branch";
+      let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+      // Create first ref
+      let first_ref_oid = {
+        let path = generate_path(PathVariant::Ref(RefVariant::Head(ref_name))).unwrap();
+        let ref_value = RefValue { symbolic: false, value: Some(commit_oid.clone()), path: path.clone() };
+        update_ref(&ref_value, true).expect("Issue when updating ref");
+        fs::read_to_string(path).unwrap()
+      };
+
+      let path = generate_path(PathVariant::Ref(RefVariant::Tag("Tag to ref"))).unwrap();
+      // Currently, cannot pass ref directly to update_ref: when using ugit, the CLI converts from ref down to the bare commit.
+      let ref_value = RefValue { symbolic: false, value: Some(first_ref_oid), path: path.clone() };
+      update_ref(&ref_value, true).expect("Issue when updating ref");
+
+      let contents = fs::read_to_string(path).unwrap();
+      assert_eq!(contents, commit_oid);
     }
     delete_test_directory();
   }
