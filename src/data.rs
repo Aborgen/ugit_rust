@@ -154,6 +154,10 @@ pub fn get_head() -> Option<std::io::Result<String>> {
 }
 
 fn get_ref_file(path: &Path, deref: bool) -> Option<std::io::Result<RefValue>> {
+  if !repository_initialized() {
+    return Some(Err(Error::new(ErrorKind::NotFound, "A ugit repository does not exist")));
+  }
+
   if !path.is_file() {
     return None;
   }
@@ -190,7 +194,10 @@ fn recur_deref(path: &Path, deref: bool) -> std::io::Result<String> {
 }
 
 fn update_ref_file(path: &Path, oid: &str) -> std::io::Result<()> {
-  if !validate_user_given_ref(oid) {
+  if !repository_initialized() {
+    return Err(Error::new(ErrorKind::NotFound, "A ugit repository does not exist"));
+  }
+  else if !validate_user_given_ref(oid) {
     panic!("Tried to create a ref for something that is not a commit or another ref at {}", path.display());
   }
 
