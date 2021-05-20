@@ -604,6 +604,71 @@ mod tests {
     assert!(get_ref(&path, true).is_err());
   }
 
+  #[test]
+  #[serial]
+  fn set_head_updates_the_contents_of_HEAD_given_valid_oid() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+      set_head(&commit_oid).expect("Issue when updating ref");
+
+      let path = generate_path(PathVariant::Head).unwrap();
+      let contents = fs::read_to_string(path).unwrap();
+      assert_eq!(contents, commit_oid);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn set_head_returns_an_error_if_repository_is_not_initialized() {
+    assert!(set_head("").is_err());
+  }
+
+  #[test]
+  #[serial]
+  fn set_head_creates_a_ref_to_another_ref() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+      // Create first ref
+      let ref_oid = {
+        let path = generate_path(PathVariant::Ref(RefVariant::Head("Test Branch"))).unwrap();
+        let ref_value = RefValue { symbolic: false, value: Some(commit_oid.clone()), path: path.clone() };
+        update_ref(&ref_value, true).expect("Issue when updating ref");
+        fs::read_to_string(path).unwrap()
+      };
+
+      // Currently, cannot pass ref directly to set_head: when using ugit, the CLI converts from ref down to the bare commit.
+      set_head(&ref_oid).expect("Issue when updating ref");
+
+      let path = generate_path(PathVariant::Head).unwrap();
+      let contents = fs::read_to_string(path).unwrap();
+      assert_eq!(contents, commit_oid);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  #[should_panic(expected="commit * or * ref")]
+  fn set_head_panics_if_set_to_not_a_commit_or_another_ref() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    let result;
+    create_test_directory();
+    {
+      let oid = hash_object(&test_text.as_bytes(), ObjectType::Blob).unwrap();
+      result = panic::catch_unwind(|| set_head(&oid).unwrap());
+    }
+    delete_test_directory();
+
+    if let Err(err) = result {
+      panic::resume_unwind(err);
+    }
+  }
+
   fn create_test_directory() {
     fs::create_dir("TEST").expect("Issue when creating test directory");
     env::set_current_dir("TEST").expect("Issue when cding into test directory");
