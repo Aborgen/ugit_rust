@@ -174,7 +174,7 @@ fn get_ref_file(path: &Path, deref: bool) -> Option<std::io::Result<RefValue>> {
 
 fn recur_deref(path: &Path, deref: bool) -> std::io::Result<String> {
   match fs::read_to_string(&path) {
-    Err(err) => return Err(Error::new(err.kind(), format!("Error when reading from {} (recursive) -- {}", path.display(), err))),
+    Err(err) => return Err(Error::new(err.kind(), format!("Error when reading from {} (recur_deref) -- {}", path.display(), err))),
     Ok(contents) => {
       if contents.starts_with("ref:") {
         let content_parts: Vec<&str> = contents.splitn(2, ":").collect();
@@ -549,6 +549,59 @@ mod tests {
   fn update_ref_returns_an_error_if_repository_is_not_initialized() {
     let ref_value = RefValue { symbolic: false, value: None, path: PathBuf::from("") };
     assert!(update_ref(&ref_value, true).is_err());
+  }
+
+  #[test]
+  #[serial]
+  fn get_ref_returns_an_empty_ref_value_when_ref_does_not_exist() {
+    create_test_directory();
+    {
+      let path = Path::new("Doesn't exist");
+      let expected = RefValue { symbolic: false, value: None, path: path.clone().to_path_buf() };
+      let result = get_ref(&path, true).expect("Issue when getting ref");
+      assert_eq!(result, expected);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn get_ref_returns_a_ref_value_when_ref_exists() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+      let path = generate_path(PathVariant::Ref(RefVariant::Head("Test branch"))).unwrap();
+      let ref_value = RefValue { symbolic: false, value: Some(commit_oid.clone()), path: path.clone() };
+      update_ref(&ref_value, true).expect("Issue when updating ref");
+
+      let expected = RefValue { symbolic: false, value: Some(commit_oid), path: path.clone().to_path_buf() };
+      let result = get_ref(&path, true).expect("Issue when getting ref");
+      assert_eq!(result, expected);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn get_ref_returns_a_ref_value_with_a_none_value_if_given_path_is_not_a_file() {
+    create_test_directory();
+    {
+      let result = get_ref(&Path::new("nothing"), true).expect("Issue when getting ref");
+      assert!(result.value.is_none());
+
+      fs::create_dir("GoodData").unwrap();
+      let result = get_ref(&Path::new("GoodData"), true).expect("Issue when getting ref");
+      assert!(result.value.is_none());
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn get_ref_returns_an_error_if_repository_is_not_initialized() {
+    let path = Path::new("");
+    assert!(get_ref(&path, true).is_err());
   }
 
   fn create_test_directory() {
