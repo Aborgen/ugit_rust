@@ -308,7 +308,7 @@ pub enum RefVariant<'a> {
   Tag(&'a str),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RefValue {
   pub symbolic: bool,
   pub value: Option<String>,
@@ -395,6 +395,8 @@ fn get_repository() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+#![allow(non_snake_case)]
+  use std::panic;
   use std::path::Path;
   use serial_test::serial;
   use super::*;
@@ -504,6 +506,49 @@ mod tests {
       assert_eq!(contents, commit_oid);
     }
     delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  #[should_panic(expected="empty ref")]
+  fn update_ref_panics_if_tried_to_create_ref_to_nothing() {
+    let result;
+    create_test_directory();
+    {
+      let ref_value = RefValue { symbolic: false, value: None, path: PathBuf::from("New Ref") };
+      result = panic::catch_unwind(|| update_ref(&ref_value, true).unwrap());
+    }
+    delete_test_directory();
+
+    if let Err(err) = result {
+      panic::resume_unwind(err);
+    }
+  }
+
+  #[test]
+  #[serial]
+  #[should_panic(expected="not a commit or another ref")]
+  fn update_ref_panics_if_tried_to_create_ref_of_not_a_commit_or_another_ref() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    let result;
+    create_test_directory();
+    {
+      let oid = hash_object(&test_text.as_bytes(), ObjectType::Blob).unwrap();
+      let ref_value = RefValue { symbolic: false, value: Some(oid), path: PathBuf::from("New Ref") };
+      result = panic::catch_unwind(|| update_ref(&ref_value, true).unwrap());
+    }
+    delete_test_directory();
+
+    if let Err(err) = result {
+      panic::resume_unwind(err);
+    }
+  }
+
+  #[test]
+  #[serial]
+  fn update_ref_returns_an_error_if_repository_is_not_initialized() {
+    let ref_value = RefValue { symbolic: false, value: None, path: PathBuf::from("") };
+    assert!(update_ref(&ref_value, true).is_err());
   }
 
   fn create_test_directory() {
