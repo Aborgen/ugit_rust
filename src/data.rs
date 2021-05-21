@@ -653,7 +653,7 @@ mod tests {
 
   #[test]
   #[serial]
-  #[should_panic(expected="commit * or * ref")]
+  #[should_panic(expected="commit or another ref")]
   fn set_head_panics_if_set_to_not_a_commit_or_another_ref() {
     let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
     let result;
