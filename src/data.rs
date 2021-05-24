@@ -208,7 +208,7 @@ fn update_ref_file(path: &Path, oid: &str) -> std::io::Result<()> {
 // Refs may only point to commits or to other refs. This function is meant to check inside a given OID to see if it contains either of those.
 fn validate_user_given_ref(oid: &str) -> bool {
   let oid = if oid.starts_with("ref:") {
-    oid.splitn(2, "ref:").collect::<Vec<&str>>()[1]
+    oid.splitn(2, ":").collect::<Vec<&str>>()[1]
   } else {
     oid
   };
@@ -704,6 +704,43 @@ mod tests {
   #[serial]
   fn get_head_returns_an_error_if_repository_is_not_initialized() {
     assert!(get_head().unwrap().is_err());
+  }
+
+  #[test]
+  #[serial]
+  fn validate_user_given_ref_returns_false_if_given_oid_does_not_exist() {
+    create_test_directory();
+    {
+      let result = validate_user_given_ref("Nothin'");
+      assert_eq!(result, false);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn validate_user_given_ref_returns_false_if_given_oid_does_not_point_to_an_oid_or_a_commit() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let oid = hash_object(&test_text.as_bytes(), ObjectType::Blob).unwrap();
+      let result = validate_user_given_ref(&oid);
+      assert_eq!(result, false);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn validate_user_given_ref_returns_true_given_an_oid_that_points_to_a_commit() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let oid = hash_object(&test_text.as_bytes(), ObjectType::Commit).unwrap();
+      let result = validate_user_given_ref(&oid);
+      assert_eq!(result, true);
+    }
+    delete_test_directory();
   }
 
   fn create_test_directory() {
