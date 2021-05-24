@@ -669,6 +669,43 @@ mod tests {
     }
   }
 
+  #[test]
+  #[serial]
+  fn get_head_returns_none_when_head_does_not_exist() {
+    create_test_directory();
+    {
+      let path = Path::new(".ugit/HEAD");
+      if path.is_file() {
+        fs::remove_file(&path).unwrap();
+      }
+
+      let result = get_head();
+      assert!(result.is_none());
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn get_head_returns_contents_of_HEAD_when_HEAD_exists() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let path = Path::new(".ugit/HEAD");
+      fs::write(&path, test_text).unwrap();
+
+      let result = get_head().unwrap().unwrap();
+      assert_eq!(result, test_text);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn get_head_returns_an_error_if_repository_is_not_initialized() {
+    assert!(get_head().unwrap().is_err());
+  }
+
   fn create_test_directory() {
     fs::create_dir("TEST").expect("Issue when creating test directory");
     env::set_current_dir("TEST").expect("Issue when cding into test directory");
