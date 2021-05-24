@@ -743,6 +743,125 @@ mod tests {
     delete_test_directory();
   }
 
+  #[test]
+  #[serial]
+  fn locate_ref_or_oid_returns_commit_oid_that_tag_points_to_given_only_name() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    let tag_name = "Test Tag";
+    create_test_directory();
+    {
+      let ref_oid = {
+        let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+        let path = generate_path(PathVariant::Ref(RefVariant::Tag(tag_name))).unwrap();
+        let ref_value = RefValue { symbolic: false, value: Some(commit_oid.clone()), path: path.clone() };
+        update_ref(&ref_value, true).expect("Issue when updating ref");
+        fs::read_to_string(path).unwrap()
+      };
+
+      let result = locate_ref_or_oid(tag_name).unwrap().unwrap();
+      assert_eq!(result, ref_oid);
+    }
+    delete_test_directory();
+  }
+
+
+  #[test]
+  #[serial]
+  fn locate_ref_or_oid_returns_commit_oid_that_branch_points_to_given_only_name() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    let head_name = "Test Head";
+    create_test_directory();
+    {
+      let ref_oid = {
+        let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+        let path = generate_path(PathVariant::Ref(RefVariant::Head(head_name))).unwrap();
+        let ref_value = RefValue { symbolic: false, value: Some(commit_oid.clone()), path: path.clone() };
+        update_ref(&ref_value, true).expect("Issue when updating ref");
+        fs::read_to_string(path).unwrap()
+      };
+
+      let result = locate_ref_or_oid(head_name).unwrap().unwrap();
+      assert_eq!(result, ref_oid);
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn locate_ref_or_oid_returns_contents_of_given_oid() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+      let result = locate_ref_or_oid(&commit_oid).unwrap().unwrap();
+      assert!(result.contains(test_text));
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn locate_ref_or_oid_returns_contents_of_HEAD() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    create_test_directory();
+    {
+      let path = Path::new(".ugit/HEAD");
+      fs::write(&path, test_text).unwrap();
+      let result1 = locate_ref_or_oid("@").unwrap().unwrap();
+      let result2 = locate_ref_or_oid("HEAD").unwrap().unwrap();
+      assert!(result1.contains(test_text));
+      assert!(result2.contains(test_text));
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn locate_ref_or_oid_returns_an_error_if_a_tag_and_a_branch_have_the_same_name() {
+    let test_text = "Excepturi velit rem modi. Ut non ipsa aut ad dignissimos et molestias placeat. Iste est perspiciatis ab et commodi.";
+    let ref_name = "Interesting";
+    create_test_directory();
+    {
+      {
+        let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+        let path = generate_path(PathVariant::Ref(RefVariant::Tag(ref_name))).unwrap();
+        let ref_value = RefValue { symbolic: false, value: Some(commit_oid.clone()), path: path.clone() };
+        update_ref(&ref_value, true).expect("Issue when updating ref");
+        fs::read_to_string(path).unwrap()
+      };
+
+      {
+        let commit_oid = hash_object(test_text.as_bytes(), ObjectType::Commit).expect("Issue when hashing a commit");
+        let path = generate_path(PathVariant::Ref(RefVariant::Head(ref_name))).unwrap();
+        let ref_value = RefValue { symbolic: false, value: Some(commit_oid.clone()), path: path.clone() };
+        update_ref(&ref_value, true).expect("Issue when updating ref");
+        fs::read_to_string(path).unwrap()
+      };
+
+      let result = locate_ref_or_oid(ref_name).unwrap();
+      assert!(result.is_err());
+    }
+    delete_test_directory();
+  }
+
+  #[test]
+  #[serial]
+  fn locate_ref_or_oid_returns_an_error_if_repository_is_not_initialized() {
+    let result = locate_ref_or_oid("").unwrap();
+    assert!(result.is_err());
+  }
+
+  #[test]
+  #[serial]
+  fn locate_ref_or_oid_returns_none_if_a_ref_or_id_is_not_found() {
+    create_test_directory();
+    {
+      let result = locate_ref_or_oid("Good Ref Name");
+      assert!(result.is_none());
+    }
+    delete_test_directory();
+  }
+
   fn create_test_directory() {
     fs::create_dir("TEST").expect("Issue when creating test directory");
     env::set_current_dir("TEST").expect("Issue when cding into test directory");
